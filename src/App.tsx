@@ -34,7 +34,7 @@ export default function App() {
   const [glError, setGlError] = useState<string | null>(null);
   const [sizeTick, setSizeTick] = useState(0);
   const [ratioIdx, setRatioIdx] = useState(2);
-  const [gridOn, setGridOn] = useState(false);
+  const [gridOn, setGridOn] = useState(() => localStorage.getItem('oc-grid') === '1');
   const [menuOpen, setMenuOpen] = useState(false);
   const [lutModalOpen, setLutModalOpen] = useState(false);
   const [viewSize, setViewSize] = useState({ w: 0, h: 0 });
@@ -121,7 +121,7 @@ export default function App() {
   const [flash, setFlash] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef(0);
-  const [timerSec, setTimerSec] = useState(0);
+  const [timerSec, setTimerSec] = useState(() => Number(localStorage.getItem('oc-timer')) || 0);
   const [count, setCount] = useState<number | null>(null);
   const countIv = useRef(0);
 
@@ -394,6 +394,14 @@ export default function App() {
   }, [lutId, loadedLuts, params, lutIntensity, customs.length, showToast]);
 
   useEffect(() => {
+    localStorage.setItem('oc-grid', gridOn ? '1' : '0');
+  }, [gridOn]);
+
+  useEffect(() => {
+    localStorage.setItem('oc-timer', String(timerSec));
+  }, [timerSec]);
+
+  useEffect(() => {
     if (!menuOpen) return;
     const close = (e: PointerEvent) => {
       if (!(e.target as HTMLElement).closest('.menu-wrap')) setMenuOpen(false);
@@ -624,7 +632,9 @@ export default function App() {
           deps={[thumbKey]}
           customs={customs}
           expandTop={
-            frameRect && viewSize.h ? frameRect.top + frameRect.h - viewSize.h - 10 : undefined
+            viewSize.h
+              ? (Math.min(viewSize.h, (viewSize.w * 4) / 3) - viewSize.h) / 2 - 10
+              : undefined
           }
         />
       ) : (
