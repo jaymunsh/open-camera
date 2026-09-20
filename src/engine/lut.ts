@@ -129,8 +129,8 @@ export const PRESETS: Preset[] = [
   { id: 'k64', label: 'KODACHROME 64', group: '코닥', file: '/luts/film/k64.png' },
   { id: 'k25', label: 'KODACHROME 25', group: '코닥', file: '/luts/film/k25.png' },
   { id: 'e100vs', label: 'EKTACHROME VS', group: '코닥', file: '/luts/film/e100vs.png' },
-  { id: 'classic-chrome', label: 'CLASSIC CHROME', group: '후지', file: '/luts/film/classic-chrome.cube' },
-  { id: 'classic-neg', label: 'CLASSIC NEGATIVE', group: '후지', file: '/luts/film/classic-neg.cube' },
+  { id: 'leneu-chrome', label: 'LENEU CHROME', group: 'LENEU', file: '/luts/film/leneu-chrome.cube' },
+  { id: 'leneu-neg', label: 'LENEU NEG', group: 'LENEU', file: '/luts/film/leneu-neg.cube' },
   { id: 'fuji400h', label: 'FUJI 400H', group: '후지', file: '/luts/film/fuji400h.png' },
   { id: 'velvia50', label: 'VELVIA 50', group: '후지', file: '/luts/film/velvia50.png' },
   { id: 'provia100f', label: 'PROVIA 100F', group: '후지', file: '/luts/film/provia100f.png' },
@@ -181,6 +181,118 @@ export const PRESETS: Preset[] = [
     build: () =>
       buildLut(chain(sat(1.15), gain(0.98, 1.04, 0.92), con(0.08), lift(0.08))),
     fx: { grain: 0.5, leak: 0.4, dust: 0.45, aberr: 0.6, soft: 0.4 },
+  },
+  {
+    id: 'classicm',
+    label: 'CLASSIC M',
+    group: '디지캠',
+    build: () => buildLut(chain(sat(0.92), gain(1.03, 1.0, 0.95), con(0.06), lift(0.05))),
+    fx: { pix: 0.45, cnoise: 0.4, band: 0.25, dsharp: 0.45, dclip: 0.3, jpeg: 0.3, lens: 0.2, grain: 0.25, soft: 0.15, date: true },
+  },
+  {
+    id: 'grx',
+    label: 'GRX',
+    group: '디지캠',
+    build: () => buildLut(chain(sat(0.88), con(0.2), gain(0.98, 1.0, 1.02))),
+    fx: { dsharp: 0.6, pix: 0.3, cnoise: 0.35, grain: 0.45, dclip: 0.35, aberr: 0.3, jpeg: 0.25, date: true },
+  },
+  {
+    id: 'fx400',
+    label: 'FX400',
+    group: '디지캠',
+    build: () => buildLut(chain(sat(1.25), gain(1.04, 1.0, 0.94), con(0.12))),
+    fx: { flash: 0.6, pix: 0.4, cnoise: 0.5, band: 0.3, dclip: 0.5, dsharp: 0.4, jpeg: 0.4, redeye: 0.9, defect: 0.15, grain: 0.3, date: true },
+  },
+  {
+    id: 'tof',
+    label: 'TOF',
+    group: '디지캠',
+    build: () => buildLut(chain(sat(1.08), gain(1.05, 1.0, 0.9), lift(0.06), con(0.05))),
+    fx: { flash: 0.75, cnoise: 0.35, pix: 0.35, dust: 0.25, dclip: 0.45, lens: 0.55, redeye: 0.7, jpeg: 0.35, grain: 0.45, date: true },
+  },
+  {
+    id: 'classiq',
+    label: 'CLASSIQ',
+    group: '디지캠',
+    build: () => buildLut(chain(sat(0.8), con(-0.04), lift(0.08), gain(0.97, 1.0, 1.04))),
+    fx: { pix: 0.6, cnoise: 0.5, band: 0.4, dclip: 0.3, vsmear: 0.4, jpeg: 0.55, lens: 0.35, defect: 0.35, soft: 0.3, date: true },
+  },
+  {
+    id: 'ops',
+    label: 'OPS',
+    group: '디지캠',
+    build: () => buildLut(chain(sat(0.75), gain(0.98, 1.02, 0.96), con(0.1), lift(0.04))),
+    fx: { pix: 0.35, cnoise: 0.4, band: 0.3, dsharp: 0.5, jpeg: 0.35, defect: 0.2, grain: 0.35, date: true },
+  },
+  {
+    id: 'ccd2001',
+    label: 'CCD 01',
+    group: '디지캠',
+    build: () => buildLut(chain(sat(1.05), con(0.15), gain(1.02, 1.0, 0.95))),
+    fx: { pix: 0.85, cnoise: 0.7, band: 0.5, vsmear: 0.6, dclip: 0.5, aberr: 0.3, flash: 0.4, jpeg: 0.7, defect: 0.55, lens: 0.4, grain: 0.45, date: true },
+  },
+  {
+    id: 'utsurun',
+    label: 'UTSURUN',
+    group: '일본풍',
+    // 写ルンです disposable: warm-green cast, punchy contrast, heavy grain
+    build: () =>
+      buildLut(chain(sat(1.1), gain(1.01, 1.05, 0.93), con(0.16), lift(0.02), split([-0.01, 0.02, -0.01], [0.03, 0.02, -0.02], 0.8))),
+    fx: { grain: 0.4, dust: 0.2, soft: 0.2, dclip: 0.25, date: true },
+  },
+  {
+    id: 'shinsen',
+    label: 'SHINSEN',
+    group: '일본풍',
+    // 日系小清新: high-key pastel, lifted blacks, cyan-leaning shadows
+    build: () =>
+      buildLut(chain(lift(0.12), con(-0.12), sat(0.85), gain(0.97, 1.0, 1.04), split([-0.01, 0.02, 0.04], [0.03, 0.02, -0.01], 0.9))),
+    fx: { soft: 0.2, grain: 0.15 },
+  },
+  {
+    id: 'toumei',
+    label: 'TOUMEI',
+    group: '일본풍',
+    // 透明感: translucent airy skin — bright mids, gentle desat, cool shadows
+    build: () =>
+      buildLut(chain(sat(0.9), lift(0.08), con(-0.05), split([-0.02, 0.01, 0.05], [0.02, 0.01, -0.02], 1), gain(1.0, 1.005, 1.01))),
+    fx: { soft: 0.25, grain: 0.1 },
+  },
+  {
+    id: 'mori',
+    label: 'MORI',
+    group: '일본풍',
+    // 森ガール milk-tea: warm beige, low contrast, washed
+    build: () =>
+      buildLut(chain(sat(0.75), gain(1.05, 1.0, 0.92), con(-0.08), lift(0.1), split([0.02, 0.01, -0.02], [0.04, 0.02, -0.03], 0.7))),
+    fx: { grain: 0.2, soft: 0.3 },
+  },
+  {
+    id: 'showa',
+    label: 'SHOWA',
+    group: '일본풍',
+    // 昭和レトロ: amber warmth, faded blacks, print-paper warmth
+    build: () =>
+      buildLut(chain(sat(0.7), gain(1.1, 1.0, 0.85), con(0.05), lift(0.1), split([0.03, 0.0, -0.04], [0.05, 0.02, -0.05], 0.9))),
+    fx: { grain: 0.45, dust: 0.3, soft: 0.35, date: true },
+  },
+  {
+    id: 'neon',
+    label: 'NEON',
+    group: '일본풍',
+    // 東京ナイト: teal shadows + magenta-leaning highlights + neon halation
+    build: () =>
+      buildLut(chain(sat(1.12), split([-0.03, 0.03, 0.05], [0.06, -0.01, 0.03], 1), con(0.15))),
+    fx: { halation: 0.4, grain: 0.3, soft: 0.1 },
+  },
+  {
+    id: 'midori',
+    label: 'MIDORI',
+    group: '일본풍',
+    // GR 포지티브 스타일: 깊은 그린/틸 섀도, 웜 하이라이트, 크런치한 대비
+    build: () =>
+      buildLut(chain(sat(1.15), gain(0.96, 1.07, 0.96), con(0.16), split([-0.02, 0.03, 0.01], [0.03, 0.01, -0.02], 0.9))),
+    fx: { grain: 0.15, dsharp: 0.35, dclip: 0.2 },
   },
 ];
 

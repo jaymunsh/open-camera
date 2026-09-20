@@ -14,6 +14,8 @@
 | `lookup_miss_etikate.png` | GPUImage — deviantart "Miss Etikate Action 15" 기반 | 동일 | 동일 |
 | `lookup_soft_elegance_1.png` | GPUImage Resources | 동일 | 동일 |
 | `lookup_soft_elegance_2.png` | GPUImage Resources | 동일 | 동일 |
+| `film/*.png` (HaldCLUT 20종) | RawTherapee Film Simulation / Natron CLUT | CC BY-SA 4.0 | CREDITS.md 표기 — 저작자 표기 의무 충족됨 (앱 내 라이선스 시트) |
+| `film/leneu-chrome.cube`, `film/leneu-neg.cube` | DaVinci Resolve 자체 생성 (TITLE 헤더 확인) | 프로젝트 라이선스 | OK — 표기명 LENEU로 리네이밍 (후지 시뮬레이션 상표 회피) |
 
 ## 코드 생성 프리셋 (`src/engine/lut.ts` PRESETS)
 

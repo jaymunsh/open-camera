@@ -10,7 +10,18 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icons/*.png'],
+      includeAssets: ['icons/*.png', 'fonts/*', 'licenses/*', 'luts/film/CREDITS.md'],
+      workbox: {
+        globIgnores: ['wasm/**', 'models/**'],
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+        runtimeCaching: [
+          {
+            urlPattern: /\/(wasm|models)\/.*/i,
+            handler: 'CacheFirst',
+            options: { cacheName: 'oc-ml', expiration: { maxEntries: 12 } },
+          },
+        ],
+      },
       manifest: {
         name: 'open-camera',
         short_name: 'oC',

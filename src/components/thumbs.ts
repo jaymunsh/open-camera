@@ -36,19 +36,29 @@ export function getSampleImage(): Promise<HTMLImageElement> {
   return sampleImg;
 }
 
-async function buildThumbs(items: ThumbItem[], fallbackSrc: TexImageSource | null) {
+async function buildThumbs(
+  items: ThumbItem[],
+  fallbackSrc: TexImageSource | null,
+  srcKey: string,
+  preferSrc: boolean,
+) {
   const { pipe, canvas } = getThumbPipe();
   canvas.width = CACHE_SIZE;
   canvas.height = CACHE_SIZE;
   let src: TexImageSource | null = null;
-  try {
-    src = await getSampleImage();
-  } catch {
+  if (preferSrc && fallbackSrc) {
     src = fallbackSrc;
+  } else {
+    try {
+      src = await getSampleImage();
+    } catch {
+      src = fallbackSrc;
+    }
   }
   if (!src) return;
   for (const item of items) {
-    if (thumbCache.has(item.id)) continue;
+    const ck = `${srcKey}:${item.id}`;
+    if (thumbCache.has(ck)) continue;
     let lut = null;
     try {
       lut = item.custom ? await loadCustomLut(item.id) : await loadPresetLut(item.id);
@@ -63,14 +73,14 @@ async function buildThumbs(items: ThumbItem[], fallbackSrc: TexImageSource | nul
     off.width = CACHE_SIZE;
     off.height = CACHE_SIZE;
     off.getContext('2d')!.drawImage(canvas, 0, 0);
-    thumbCache.set(item.id, off);
+    thumbCache.set(ck, off);
   }
   pipe.setFx(null);
   pipe.setLUT('identity', null);
 }
 
-export function applyThumb(el: HTMLCanvasElement, id: string) {
-  const t = thumbCache.get(id);
+export function applyThumb(el: HTMLCanvasElement, id: string, srcKey = 'smp') {
+  const t = thumbCache.get(`${srcKey}:${id}`);
   if (t) el.getContext('2d')?.drawImage(t, 0, 0, el.width, el.height);
 }
 
@@ -79,12 +89,22 @@ export async function renderPresetThumbs(
   items: ThumbItem[],
   fallbackSrc: TexImageSource | null,
   cancelled: () => boolean,
+  opts: { srcKey?: string; preferSrc?: boolean } = {},
 ) {
-  const missing = items.filter((i) => !thumbCache.has(i.id));
+  const srcKey = opts.srcKey ?? 'smp';
+  // drop thumbnails cached for other imported photos — keep current photo + sample set
+  for (const k of thumbCache.keys()) {
+    const i = k.indexOf(':');
+    const ksrc = k.slice(0, i);
+    if (ksrc !== 'smp' && ksrc !== srcKey) thumbCache.delete(k);
+  }
+  const missing = items.filter((i) => !thumbCache.has(`${srcKey}:${i.id}`));
   if (missing.length) {
-    cachePromise = cachePromise.then(() => buildThumbs(missing, fallbackSrc));
+    cachePromise = cachePromise.then(() =>
+      buildThumbs(missing, fallbackSrc, srcKey, !!opts.preferSrc),
+    );
     await cachePromise;
   }
   if (cancelled()) return;
-  for (const [el, id] of refs) if (el.isConnected) applyThumb(el, id);
+  for (const [el, id] of refs) if (el.isConnected) applyThumb(el, id, srcKey);
 }

@@ -30,9 +30,11 @@ interface Props {
   getSource: () => TexImageSource | null;
   onClose: () => void;
   customs: { id: string; name: string }[];
+  srcKey?: string;
+  preferSrc?: boolean;
 }
 
-export function FilterSheet({ selected, onSelect, getSource, onClose, customs }: Props) {
+export function FilterSheet({ selected, onSelect, getSource, onClose, customs, srcKey = 'smp', preferSrc = false }: Props) {
   const refs = useRef(new Map<HTMLCanvasElement, string>());
   const sheetRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -73,12 +75,13 @@ export function FilterSheet({ selected, onSelect, getSource, onClose, customs }:
       allItems.map((i) => ({ id: i.id, custom: i.custom, fx: i.fx })),
       getSource(),
       () => cancelled,
+      { srcKey, preferSrc },
     );
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customs]);
+  }, [customs, srcKey]);
 
   const jumpTo = (title: string) => {
     const el = groupRefs.current.get(title);
@@ -179,7 +182,7 @@ export function FilterSheet({ selected, onSelect, getSource, onClose, customs }:
                       ref={(el) => {
                         if (el) {
                           refs.current.set(el, p.id);
-                          applyThumb(el, p.id);
+                          applyThumb(el, p.id, srcKey);
                       }
                       }}
                     />

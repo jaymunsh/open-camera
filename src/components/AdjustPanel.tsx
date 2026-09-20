@@ -1,5 +1,6 @@
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { PARAM_DEFS, type FilterParams, type ParamDef } from '../engine/types';
+import { ResetChip } from './ResetChip';
 
 interface Props {
   params: FilterParams;
@@ -100,6 +101,46 @@ const ICONS: Record<string, ReactNode> = {
       <circle cx="18" cy="17" r="1.1" fill="currentColor" stroke="none" />
     </>
   ),
+  vibrance: (
+    <>
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 4a8 8 0 010 16z" fill="currentColor" stroke="none" opacity="0.45" />
+      <path d="M12 4v16" />
+    </>
+  ),
+  whites: (
+    <>
+      <circle cx="12" cy="12" r="4.5" />
+      <path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2" />
+      <path d="M6 6l1.4 1.4M18 6l-1.4 1.4M6 18l1.4-1.4M18 18l-1.4-1.4" opacity="0.55" />
+    </>
+  ),
+  blacks: (
+    <>
+      <circle cx="12" cy="12" r="4.5" fill="currentColor" stroke="none" />
+      <path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2" />
+    </>
+  ),
+  clarity: (
+    <>
+      <circle cx="10" cy="10" r="5.5" />
+      <path d="M14 14l6 6" />
+      <path d="M10 7v6M7 10h6" />
+    </>
+  ),
+  bloom: (
+    <>
+      <circle cx="12" cy="12" r="4" fill="currentColor" stroke="none" opacity="0.5" />
+      <path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3" />
+      <path d="M5.5 5.5l2 2M18.5 5.5l-2 2M5.5 18.5l2-2M18.5 18.5l-2-2" opacity="0.6" />
+    </>
+  ),
+  skin: (
+    <>
+      <circle cx="12" cy="9" r="4.2" />
+      <path d="M5 19c1.2-3.2 3.9-5 7-5s5.8 1.8 7 5" />
+    </>
+  ),
 };
 
 interface Item {
@@ -143,6 +184,7 @@ export function AdjustPanel({ params, onChange, intensity, onIntensity, onReset,
   return (
     <div className="panel">
       <div className="adj-strip">
+        <ResetChip label="조절리셋" onReset={onReset} />
         {items.map((i) => (
           <button
             key={i.key}
@@ -169,7 +211,7 @@ export function AdjustPanel({ params, onChange, intensity, onIntensity, onReset,
           onDoubleClick={() => setVal(cur.key === 'intensity' ? 1 : 0)}
         />
         <span className="adj-val">{val.toFixed(2)}</span>
-        <button className="reset" onClick={onReset}>
+        <button className="reset" onClick={() => setVal(cur.key === 'intensity' ? 1 : 0)}>
           초기화
         </button>
       </div>
