@@ -1,10 +1,11 @@
-import { FaceLandmarker, FilesetResolver, type NormalizedLandmark } from '@mediapipe/tasks-vision';
+import type { FaceLandmarker, NormalizedLandmark } from '@mediapipe/tasks-vision';
 
 let landmarkerP: Promise<FaceLandmarker> | null = null;
 
 export function getLandmarker(): Promise<FaceLandmarker> {
   if (!landmarkerP) {
     landmarkerP = (async () => {
+      const { FaceLandmarker, FilesetResolver } = await import('@mediapipe/tasks-vision');
       const fileset = await FilesetResolver.forVisionTasks('/wasm');
       return FaceLandmarker.createFromOptions(fileset, {
         baseOptions: { modelAssetPath: '/models/face_landmarker.task' },

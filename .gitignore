@@ -3,5 +3,8 @@ dist
 .npm-cache
 .DS_Store
 *.local
+*.log
+.env*
 dev-dist
+.vercel
 sample_imgs/

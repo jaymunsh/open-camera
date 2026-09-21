@@ -129,8 +129,6 @@ export const PRESETS: Preset[] = [
   { id: 'k64', label: 'KODACHROME 64', group: '코닥', file: '/luts/film/k64.png' },
   { id: 'k25', label: 'KODACHROME 25', group: '코닥', file: '/luts/film/k25.png' },
   { id: 'e100vs', label: 'EKTACHROME VS', group: '코닥', file: '/luts/film/e100vs.png' },
-  { id: 'leneu-chrome', label: 'LENEU CHROME', group: 'LENEU', file: '/luts/film/leneu-chrome.cube' },
-  { id: 'leneu-neg', label: 'LENEU NEG', group: 'LENEU', file: '/luts/film/leneu-neg.cube' },
   { id: 'fuji400h', label: 'FUJI 400H', group: '후지', file: '/luts/film/fuji400h.png' },
   { id: 'velvia50', label: 'VELVIA 50', group: '후지', file: '/luts/film/velvia50.png' },
   { id: 'provia100f', label: 'PROVIA 100F', group: '후지', file: '/luts/film/provia100f.png' },

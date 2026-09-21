@@ -105,6 +105,7 @@ export default function App() {
     return v === 'p' || v === 'l' ? v : 'auto';
   });
   const [dateSheet, setDateSheet] = useState(false);
+  const [grainOff, setGrainOff] = useState(false);
   const [licOpen, setLicOpen] = useState(false);
   const [lutModalOpen, setLutModalOpen] = useState(false);
   const [viewSize, setViewSize] = useState({ w: 0, h: 0 });
@@ -383,6 +384,7 @@ export default function App() {
   const fxSeedRef = useRef(0.5);
   useEffect(() => {
     fxSeedRef.current = Math.random();
+    setGrainOff(false);
   }, [lutId]);
 
   useEffect(() => {
@@ -393,9 +395,11 @@ export default function App() {
       key: `preset-${lutId}`,
       lut,
       amount: lutId === 'none' ? 0 : lutIntensity,
-      fx: preset?.fx ? { ...preset.fx, seed: fxSeedRef.current } : null,
+      fx: preset?.fx
+        ? { ...preset.fx, grain: grainOff ? 0 : preset.fx.grain, seed: fxSeedRef.current }
+        : null,
     });
-  }, [lutId, lutReady, loadedLuts, lutIntensity]);
+  }, [lutId, lutReady, loadedLuts, lutIntensity, grainOff]);
 
   const showDate = dateMode === 'on' || (dateMode === 'auto' && !!applied.fx?.date);
 
@@ -413,7 +417,7 @@ export default function App() {
   const getPipe = useCallback(() => {
     if (!pipeRef.current) {
       try {
-        pipeRef.current = new FilterPipeline(canvasRef.current!);
+        pipeRef.current = new FilterPipeline(canvasRef.current!, { preserve: false });
         pipeRef.current.onRestore = () => {
           maskDirty.current = true;
           warpDirty.current = true;
@@ -647,23 +651,34 @@ export default function App() {
     }
   }, [busy, editSrc, params, applied, showToast, beauty, showDate, dateFmt, dateSize, dateOrient]);
 
-  const importLut = useCallback(async (f: File) => {
-    try {
-      const buf = await f.arrayBuffer();
-      const ext = /\.cube$/i.test(f.name) ? 'cube' : 'png';
-      const entry = await addCustomLut(
-        f.name.replace(/\.(cube|png|jpg|jpeg)$/i, ''),
-        buf,
-        ext,
-      );
+  const importLut = useCallback(
+    async (files: File[]) => {
+      let last: CustomEntry | null = null;
+      let ok = 0;
+      for (const f of files) {
+        try {
+          const buf = await f.arrayBuffer();
+          const ext = /\.cube$/i.test(f.name) ? 'cube' : 'png';
+          last = await addCustomLut(
+            f.name.replace(/\.(cube|png|jpg|jpeg)$/i, ''),
+            buf,
+            ext,
+          );
+          ok++;
+        } catch (e) {
+          setGlError(`${f.name}: ${(e as Error).message}`);
+        }
+      }
+      if (!ok) return;
       setCustoms(listCustomLuts());
-      setLutId(entry.id);
-      setPanel('filters');
-      showToast('LUT 적용됨');
-    } catch (e) {
-      setGlError((e as Error).message);
-    }
-  }, [showToast]);
+      if (last) {
+        setLutId(last.id);
+        setPanel('filters');
+      }
+      showToast(ok > 1 ? `LUT ${ok}개 추가됨` : 'LUT 적용됨');
+    },
+    [showToast],
+  );
 
   const bakeCustomLut = useCallback(async () => {
     try {
@@ -945,6 +960,21 @@ export default function App() {
             />
           </div>
         )}
+        {!compare &&
+          imgRect &&
+          (PRESETS.find((p) => p.id === lutId)?.fx?.grain ?? 0) > 0 && (
+            <button
+              className={`grain-chip${grainOff ? ' off' : ''}`}
+              style={{
+                left: imgRect.left + imgRect.w * 0.04,
+                top: imgRect.top + imgRect.h * 0.03,
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => setGrainOff((g) => !g)}
+            >
+              그레인
+            </button>
+          )}
         {mode === 'camera' && ready && zoomCaps && zoomOptions.length > 1 && (
           <div className="zoombar" onPointerDown={(e) => e.stopPropagation()}>
             {zoomOptions.map((z, i) => {
@@ -1124,10 +1154,11 @@ export default function App() {
         ref={cubeRef}
         type="file"
         accept=".cube,.png,.jpg,.jpeg"
+        multiple
         hidden
         onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) importLut(f);
+          const fs = e.target.files ? Array.from(e.target.files) : [];
+          if (fs.length) void importLut(fs);
           e.target.value = '';
         }}
       />

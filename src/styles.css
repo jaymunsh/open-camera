@@ -209,6 +209,25 @@ button.on {
   color: #000;
 }
 
+.grain-chip {
+  position: absolute;
+  z-index: 6;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  opacity: 0.55;
+}
+
+.grain-chip.off {
+  opacity: 0.3;
+  text-decoration: line-through;
+}
+
 .filter-name {
   font-weight: 700;
   font-size: 13px;

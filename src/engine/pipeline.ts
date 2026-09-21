@@ -193,11 +193,15 @@ export class FilterPipeline {
   private warpW = 0;
   private warpH = 0;
   private warpGpu = true;
+  private eyesBuf = new Float32Array(24);
   onRestore: (() => void) | null = null;
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement, opts?: { preserve?: boolean }) {
     this.canvas = canvas;
-    const gl = canvas.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true });
+    const gl = canvas.getContext('webgl2', {
+      antialias: false,
+      preserveDrawingBuffer: opts?.preserve ?? true,
+    });
     if (!gl) throw new Error('WebGL2를 지원하지 않는 환경입니다');
     this.gl = gl;
     this.initGL();
@@ -573,7 +577,8 @@ export class FilterPipeline {
     gl.uniform1f(u.u_defect, fx?.defect ?? 0);
     gl.uniform1f(u.u_redeye, fx?.redeye ?? 0);
     const eyes = opts.eyes ?? [];
-    const ev = new Float32Array(24);
+    const ev = this.eyesBuf;
+    ev.fill(0);
     for (let i = 0; i < Math.min(6, eyes.length); i++) {
       ev[i * 4] = eyes[i].x;
       ev[i * 4 + 1] = eyes[i].y;

@@ -56,6 +56,8 @@ async function buildThumbs(
     }
   }
   if (!src) return;
+  pipe.setFx(null);
+  pipe.setSource(src);
   for (const item of items) {
     const ck = `${srcKey}:${item.id}`;
     if (thumbCache.has(ck)) continue;
@@ -66,7 +68,6 @@ async function buildThumbs(
       /* keep null */
     }
     pipe.setFx(item.fx ? { ...item.fx, seed: 0.37 } : null);
-    pipe.setSource(src);
     pipe.setLUT(`preset-${item.id}`, lut);
     pipe.render(DEFAULT_PARAMS, item.id === 'none' ? 0 : 1, { fit: 'cover' });
     const off = document.createElement('canvas');

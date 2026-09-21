@@ -20,6 +20,11 @@ export default defineConfig({
             handler: 'CacheFirst',
             options: { cacheName: 'oc-ml', expiration: { maxEntries: 12 } },
           },
+          {
+            urlPattern: /\/luts\/.*/i,
+            handler: 'CacheFirst',
+            options: { cacheName: 'oc-luts', expiration: { maxEntries: 64 } },
+          },
         ],
       },
       manifest: {
