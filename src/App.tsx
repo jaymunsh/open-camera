@@ -518,6 +518,7 @@ export default function App() {
           compareRef.current ? 0 : l.amount,
           {
           fit: 'contain',
+          valign: 'bottom',
           mirror: facingRef.current === 'user',
           time: t * 0.001,
           ratio: ratioRef.current,

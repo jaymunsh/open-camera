@@ -4,6 +4,7 @@ import { DEFAULT_PARAMS, type FilterParams, type FxSpec, type LutData } from './
 
 export interface RenderOpts {
   fit?: 'cover' | 'contain';
+  valign?: 'center' | 'bottom';
   mirror?: boolean;
   time?: number;
   ratio?: { w: number; h: number } | null;
@@ -480,7 +481,7 @@ export class FilterPipeline {
     } else {
       if (ta > ca) {
         vh = Math.round(cw / ta);
-        vy = Math.round((ch - vh) / 2);
+        vy = opts.valign === 'bottom' ? 0 : Math.round((ch - vh) / 2);
       } else {
         vw = Math.round(ch * ta);
         vx = Math.round((cw - vw) / 2);
