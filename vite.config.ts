@@ -29,7 +29,7 @@ export default defineConfig({
       },
       manifest: {
         name: 'open-camera',
-        short_name: 'oC',
+        short_name: 'Open Camera',
         description: '카메라 필터 PWA',
         theme_color: '#000000',
         background_color: '#000000',
