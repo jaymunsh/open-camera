@@ -199,14 +199,14 @@ export const PRESETS: Preset[] = [
     label: 'FX400',
     group: '디지캠',
     build: () => buildLut(chain(sat(1.25), gain(1.04, 1.0, 0.94), con(0.12))),
-    fx: { flash: 0.6, pix: 0.4, cnoise: 0.5, band: 0.3, dclip: 0.5, dsharp: 0.4, jpeg: 0.4, redeye: 0.9, defect: 0.15, grain: 0.3, date: true },
+    fx: { flash: 0.6, pix: 0.4, cnoise: 0.5, band: 0.3, dclip: 0.5, dsharp: 0.4, jpeg: 0.4, defect: 0.15, grain: 0.3, date: true },
   },
   {
     id: 'tof',
     label: 'TOF',
     group: '디지캠',
     build: () => buildLut(chain(sat(1.08), gain(1.05, 1.0, 0.9), lift(0.06), con(0.05))),
-    fx: { flash: 0.75, cnoise: 0.35, pix: 0.35, dust: 0.25, dclip: 0.45, lens: 0.55, redeye: 0.7, jpeg: 0.35, grain: 0.45, date: true },
+    fx: { flash: 0.75, cnoise: 0.35, pix: 0.35, dust: 0.25, dclip: 0.45, lens: 0.55, jpeg: 0.35, grain: 0.45, date: true },
   },
   {
     id: 'classiq',
