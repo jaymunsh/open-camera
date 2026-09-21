@@ -68,8 +68,7 @@ function StampText({
 }
 
 const APP_VERSION = pkg.version;
-// GitHub 저장소 — 배포 시 실제 URL로 교체
-const REPO_URL = 'https://github.com/sunghyuk/izi-filter';
+const REPO_URL = 'https://github.com/jaymunsh/open-camera';
 
 const RATIOS = [
   { label: '1:1', w: 1, h: 1 },
