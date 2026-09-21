@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import pkg from '../package.json';
 import { useCamera } from './camera/useCamera';
 import { AdjustPanel } from './components/AdjustPanel';
 import { BeautyPanel, DEFAULT_BEAUTY, type BeautyParams } from './components/BeautyPanel';
@@ -66,7 +67,7 @@ function StampText({
   return <canvas ref={ref} className="stamp-canvas" />;
 }
 
-const APP_VERSION = '0.1.0';
+const APP_VERSION = pkg.version;
 // GitHub 저장소 — 배포 시 실제 URL로 교체
 const REPO_URL = 'https://github.com/sunghyuk/izi-filter';
 
