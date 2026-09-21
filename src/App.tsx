@@ -774,7 +774,7 @@ export default function App() {
       h = viewSize.h;
       w = h * ta;
     }
-    return { left: (viewSize.w - w) / 2, top: (viewSize.h - h) / 2, w, h };
+    return { left: (viewSize.w - w) / 2, top: viewSize.h - h, w, h };
   }, [viewSize, ratio]);
 
   const imgRect = useMemo(() => {
@@ -1055,11 +1055,6 @@ export default function App() {
           preferSrc={mode === 'edit'}
           intensity={lutIntensity}
           onIntensity={setLutIntensity}
-          expandTop={
-            viewSize.h
-              ? (Math.min(viewSize.h, (viewSize.w * 4) / 3) - viewSize.h) / 2 - 10
-              : undefined
-          }
         />
       ) : (
         <AdjustPanel

@@ -11,7 +11,6 @@ interface Props {
   onExpand: () => void;
   deps: readonly unknown[];
   customs: { id: string; name: string }[];
-  expandTop?: number;
   srcKey?: string;
   preferSrc?: boolean;
   intensity?: number;
@@ -25,7 +24,6 @@ export function FilterStrip({
   onExpand,
   deps,
   customs,
-  expandTop,
   srcKey = 'smp',
   preferSrc = false,
   intensity = 1,
@@ -101,7 +99,6 @@ export function FilterStrip({
     >
       <button
         className="strip-expand"
-        style={expandTop !== undefined ? { top: expandTop } : undefined}
         onClick={onExpand}
         aria-label="필터 전체 보기"
       >
