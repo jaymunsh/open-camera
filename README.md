@@ -3,7 +3,7 @@
 iOS 카메라 경험을 목표로 한 설치형 웹 카메라 필터 PWA.
 WebGL2 셰이더 파이프라인 위에서 실시간 필터/프로시저럴 이펙트를 처리합니다.
 
-**Live**: https://open-camera.vercel.app
+**Live**: https://open-camera-leneu.vercel.app
 
 > **지원 환경**: iOS(Safari/WebKit) 위주로 개발·검증되었습니다.
 > UI/제스처/설치 흐름 모두 iOS 기준이며, Android·데스크탑 브라우저에서는
@@ -56,7 +56,7 @@ CLI 배포: `npx vercel` (프로젝트 루트에서)
 
 ### iOS 설치
 
-https://open-camera.vercel.app 를 Safari로 열고 공유 → **홈 화면에 추가**.
+https://open-camera-leneu.vercel.app 를 Safari로 열고 공유 → **홈 화면에 추가**.
 독립 앱으로 동작하며 카메라 권한은 최초 1회만 묻습니다.
 
 ## 구조
