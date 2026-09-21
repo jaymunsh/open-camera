@@ -66,6 +66,10 @@ function StampText({
   return <canvas ref={ref} className="stamp-canvas" />;
 }
 
+const APP_VERSION = '0.1.0';
+// GitHub 저장소 — 배포 시 실제 URL로 교체
+const REPO_URL = 'https://github.com/sunghyuk/izi-filter';
+
 const RATIOS = [
   { label: '1:1', w: 1, h: 1 },
   { label: '4:5', w: 4, h: 5 },
@@ -1283,6 +1287,19 @@ export default function App() {
               <div className="lic-item">
                 <b>개인정보</b>
                 <span>촬영한 사진과 얼굴 데이터는 기기 안에서만 처리됩니다.</span>
+              </div>
+              <div className="lic-item">
+                <b>버전</b>
+                <span>
+                  v{APP_VERSION} —{' '}
+                  <a href={`${REPO_URL}/blob/main/CHANGELOG.md`} target="_blank" rel="noreferrer">
+                    변경 기록
+                  </a>
+                  {' · '}
+                  <a href={REPO_URL} target="_blank" rel="noreferrer">
+                    소스 코드
+                  </a>
+                </span>
               </div>
             </div>
           </div>
