@@ -661,6 +661,8 @@ export default function App() {
       let ok = 0;
       for (const f of files) {
         try {
+          if (!/\.(cube|png|jpe?g)$/i.test(f.name))
+            throw new Error('지원하지 않는 형식입니다 (.cube / .png)');
           const buf = await f.arrayBuffer();
           const ext = /\.cube$/i.test(f.name) ? 'cube' : 'png';
           last = await addCustomLut(
@@ -1157,7 +1159,6 @@ export default function App() {
       <input
         ref={cubeRef}
         type="file"
-        accept=".cube,.png,.jpg,.jpeg"
         multiple
         hidden
         onChange={(e) => {
