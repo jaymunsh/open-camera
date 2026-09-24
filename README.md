@@ -72,7 +72,8 @@ public/
   luts/film/ HaldCLUT 필름 LUT (RawTherapee/Natron, CC BY-SA — CREDITS.md 참조)
   wasm/      MediaPipe WASM 런타임
   models/    face_landmarker.task
-docs/        뷰티 설계, LUT 출처/라이선스 추적
+docs/        architecture(구조 상세), troubleshooting(이슈/해결 기록),
+             beauty-plan(뷰티 설계), lut-provenance(LUT 출처), legal-research(라이선스 리서치)
 ```
 
 ## 커스텀 LUT
