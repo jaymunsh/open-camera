@@ -417,6 +417,7 @@ export default function App() {
   facingRef.current = facing;
   const ratioRef = useRef(ratio);
   ratioRef.current = ratio;
+  const valignRef = useRef<'center' | 'bottom'>('bottom');
 
   const getPipe = useCallback(() => {
     if (!pipeRef.current) {
@@ -518,7 +519,7 @@ export default function App() {
           compareRef.current ? 0 : l.amount,
           {
           fit: 'contain',
-          valign: 'bottom',
+          valign: valignRef.current,
           mirror: facingRef.current === 'user',
           time: t * 0.001,
           ratio: ratioRef.current,
@@ -775,8 +776,14 @@ export default function App() {
       h = viewSize.h;
       w = h * ta;
     }
-    return { left: (viewSize.w - w) / 2, top: viewSize.h - h, w, h };
+    // small letterbox → hug the bottom (photo meets the controls like iOS
+    // camera); large letterbox (1:1) → center so the top gap stays balanced
+    const padY = viewSize.h - h;
+    return { left: (viewSize.w - w) / 2, top: padY > 100 ? padY / 2 : padY, w, h };
   }, [viewSize, ratio]);
+
+  valignRef.current =
+    frameRect && viewSize.h - frameRect.h > 100 ? 'center' : 'bottom';
 
   const imgRect = useMemo(() => {
     if (mode === 'camera') return frameRect;
