@@ -1,11 +1,34 @@
-# open-camera (oC)
+<p align="center">
+  <img src="public/icons/icon-192.png" width="96" alt="open-camera 아이콘" />
+</p>
 
-iOS 카메라 경험을 목표로 한 설치형 웹 카메라 필터 PWA.
-WebGL2 셰이더 파이프라인 위에서 실시간 필터/프로시저럴 이펙트를 처리합니다.
+<h1 align="center">open-camera</h1>
 
-**Live**: https://open-camera-leneu.vercel.app
+<p align="center">
+  iOS 카메라 경험을 목표로 한 설치형 웹 카메라 필터 PWA.<br />
+  WebGL2 셰이더 파이프라인 위에서 실시간 필터/프로시저럴 이펙트를 처리합니다.
+</p>
 
-<img src="docs/screenshot.png" width="300" alt="open-camera 앱 화면 — 1:1 비율, 필터 스트립" />
+<p align="center">
+  <img src="https://img.shields.io/github/package-json/v/jaymunsh/open-camera" alt="version" />
+  <img src="https://img.shields.io/badge/PWA-installable-blueviolet" alt="PWA" />
+  <img src="https://img.shields.io/badge/WebGL2-realtime-8a7cff" alt="WebGL2" />
+  <img src="https://img.shields.io/badge/iOS-Safari-lightgrey" alt="iOS" />
+</p>
+
+<p align="center">
+  <strong><a href="https://open-camera-leneu.vercel.app">▶ Live Demo</a></strong>
+  &nbsp;·&nbsp;
+  <a href="docs/architecture.md">아키텍처</a>
+  &nbsp;·&nbsp;
+  <a href="CHANGELOG.md">변경 기록</a>
+  &nbsp;·&nbsp;
+  <a href="docs/troubleshooting.md">트러블슈팅</a>
+</p>
+
+<p align="center">
+  <img src="docs/screenshot.png" width="300" alt="open-camera 앱 화면 — 1:1 비율, 필터 스트립" />
+</p>
 
 > **지원 환경**: iOS(Safari/WebKit) 위주로 개발·검증되었습니다.
 > UI/제스처/설치 흐름 모두 iOS 기준이며, Android·데스크탑 브라우저에서는
