@@ -5,6 +5,8 @@ WebGL2 셰이더 파이프라인 위에서 실시간 필터/프로시저럴 이�
 
 **Live**: https://open-camera-leneu.vercel.app
 
+<img src="docs/screenshot.png" width="300" alt="open-camera 앱 화면 — 1:1 비율, 필터 스트립" />
+
 > **지원 환경**: iOS(Safari/WebKit) 위주로 개발·검증되었습니다.
 > UI/제스처/설치 흐름 모두 iOS 기준이며, Android·데스크탑 브라우저에서는
 > 동작하더라도 일부 기능(카메라, 설치, 공유 등)이 다르게 동작할 수 있습니다.
