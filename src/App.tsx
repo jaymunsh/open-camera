@@ -425,7 +425,6 @@ export default function App() {
   facingRef.current = facing;
   const ratioRef = useRef(ratio);
   ratioRef.current = ratio;
-  const valignRef = useRef<'center' | 'bottom'>('bottom');
 
   const getPipe = useCallback(() => {
     if (!pipeRef.current) {
@@ -527,7 +526,7 @@ export default function App() {
           compareRef.current ? 0 : l.amount,
           {
           fit: 'contain',
-          valign: valignRef.current,
+          valign: 'center',
           mirror: facingRef.current === 'user',
           time: t * 0.001,
           ratio: ratioRef.current,
@@ -805,7 +804,6 @@ export default function App() {
 
   const thumbKey = `${mode}-${ready}-${facing}-${editSrc ? `img${editToken}` : 'none'}`;
 
-  const centerFrame = ratio.w === 4 && ratio.h === 5;
   const frameRect = useMemo(() => {
     if (!viewSize.w || !viewSize.h) return null;
     const ta = ratio.w / ratio.h;
@@ -819,13 +817,9 @@ export default function App() {
       h = viewSize.h;
       w = h * ta;
     }
-    // 4:5 always centers; other ratios keep their existing letterbox alignment.
-    const padY = viewSize.h - h;
-    return { left: (viewSize.w - w) / 2, top: centerFrame || padY > 100 ? padY / 2 : padY, w, h };
-  }, [viewSize, ratio, centerFrame]);
-
-  valignRef.current =
-    centerFrame || (frameRect && viewSize.h - frameRect.h > 100) ? 'center' : 'bottom';
+    // Match the centered GPU viewport for every camera ratio.
+    return { left: (viewSize.w - w) / 2, top: (viewSize.h - h) / 2, w, h };
+  }, [viewSize, ratio]);
 
   const imgRect = useMemo(() => {
     if (mode === 'camera') return frameRect;
