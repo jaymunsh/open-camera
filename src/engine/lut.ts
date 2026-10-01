@@ -1,5 +1,6 @@
 import type { FxSpec, LutData } from './types';
 import { idbDel, idbGet, idbPut } from '../utils/lutStore';
+import { ASSET_VERSION, assetUrl } from '../utils/assets';
 
 type V3 = [number, number, number];
 type ColorFn = (r: number, g: number, b: number) => V3;
@@ -308,17 +309,31 @@ export function loadPresetLut(id: string): Promise<LutData> {
         if (preset.file!.endsWith('.cube'))
           return parseCube(new TextDecoder().decode(ab));
         const bmp = await createImageBitmap(new Blob([ab], { type: 'image/png' }));
-        return parseHaldPng(bmp, preset.hald ?? 'linear');
+        try {
+          return parseHaldPng(bmp, preset.hald ?? 'linear');
+        } finally {
+          bmp.close();
+        }
       };
-      const key = `lut-v1-${id}`;
+      const key = `lut-v2-${ASSET_VERSION}-${id}`;
       p = (async () => {
         const hit = await idbGet(key);
-        if (hit) return parse(hit);
-        const ab = await fetch(preset.file!).then((r) => r.arrayBuffer());
-        idbPut(key, ab.slice(0));
-        return parse(ab);
+        if (hit) {
+          try { return await parse(hit); }
+          catch { await idbDel(key).catch(() => {}); }
+        }
+        const response = await fetch(assetUrl(preset.file!));
+        if (!response.ok) throw new Error(`필터를 불러올 수 없습니다 (HTTP ${response.status})`);
+        const ab = await response.arrayBuffer();
+        const lut = await parse(ab);
+        void idbPut(key, ab.slice(0)).catch(() => {});
+        return lut;
       })();
     }
+    p = p.catch((e) => {
+      cache.delete(id);
+      throw e;
+    });
     cache.set(id, p);
   }
   return p;
@@ -383,11 +398,7 @@ export function listCustomLuts(): CustomEntry[] {
 }
 
 function saveCustomList(list: CustomEntry[]) {
-  try {
-    localStorage.setItem(CUSTOM_KEY, JSON.stringify(list));
-  } catch {
-    /* non-fatal */
-  }
+  localStorage.setItem(CUSTOM_KEY, JSON.stringify(list));
 }
 
 export async function addCustomLut(
@@ -395,10 +406,30 @@ export async function addCustomLut(
   buf: ArrayBuffer,
   ext: 'cube' | 'png',
 ): Promise<CustomEntry> {
-  const entry: CustomEntry = { id: `c-${Date.now().toString(36)}`, name, ext };
+  // Unlike preset caches, user imports are durable data: validate before writing.
+  const lut = await parseCustomBuffer(buf, ext);
+  const entry: CustomEntry = { id: `c-${crypto.randomUUID()}`, name, ext };
   await idbPut(`custom-${entry.id}`, buf.slice(0));
-  saveCustomList([...listCustomLuts(), entry]);
+  try {
+    saveCustomList([...listCustomLuts(), entry]);
+  } catch (e) {
+    await idbDel(`custom-${entry.id}`).catch(() => {});
+    throw e;
+  }
+  customCache.set(entry.id, Promise.resolve(lut));
   return entry;
+}
+
+async function parseCustomBuffer(buf: ArrayBuffer, ext: 'cube' | 'png'): Promise<LutData> {
+  if (ext === 'cube') return parseCube(new TextDecoder().decode(buf));
+  const bmp = await createImageBitmap(new Blob([buf]));
+  try {
+    if (bmp.width !== HALD_S || bmp.height !== HALD_S)
+      throw new Error('지원하지 않는 LUT 이미지입니다 (512×512 HaldCLUT PNG 필요)');
+    return parseHaldPng(bmp, 'linear');
+  } finally {
+    bmp.close();
+  }
 }
 
 export function renameCustomLut(id: string, name: string) {
@@ -406,9 +437,16 @@ export function renameCustomLut(id: string, name: string) {
 }
 
 export async function removeCustomLut(id: string) {
-  saveCustomList(listCustomLuts().filter((e) => e.id !== id));
+  const key = `custom-${id}`;
+  const original = await idbGet(key);
+  await idbDel(key);
+  try {
+    saveCustomList(listCustomLuts().filter((e) => e.id !== id));
+  } catch (e) {
+    if (original) await idbPut(key, original);
+    throw e;
+  }
   customCache.delete(id);
-  await idbDel(`custom-${id}`);
 }
 
 export async function loadCustomLut(id: string): Promise<LutData> {
@@ -419,10 +457,11 @@ export async function loadCustomLut(id: string): Promise<LutData> {
     p = (async () => {
       const ab = await idbGet(`custom-${id}`);
       if (!ab) throw new Error('저장된 LUT를 찾을 수 없습니다');
-      if (entry.ext === 'cube') return parseCube(new TextDecoder().decode(ab));
-      const bmp = await createImageBitmap(new Blob([ab], { type: 'image/png' }));
-      return parseHaldPng(bmp, 'linear');
-    })();
+      return parseCustomBuffer(ab, entry.ext);
+    })().catch((e) => {
+      customCache.delete(id);
+      throw e;
+    });
     customCache.set(id, p);
   }
   return p;

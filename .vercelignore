@@ -1,0 +1,15 @@
+.git
+node_modules
+dist
+dev-dist
+.npm-cache
+.vercel
+.devin
+sample_imgs
+test-results
+playwright-report
+tests
+**/.DS_Store
+*.local
+*.log
+.env*

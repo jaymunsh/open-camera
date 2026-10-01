@@ -8,3 +8,5 @@ dist
 dev-dist
 .vercel
 sample_imgs/
+test-results/
+playwright-report/

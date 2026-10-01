@@ -1,4 +1,5 @@
 import type { FaceLandmarker, NormalizedLandmark } from '@mediapipe/tasks-vision';
+import { assetUrl } from '../utils/assets';
 
 let landmarkerP: Promise<FaceLandmarker> | null = null;
 
@@ -7,13 +8,18 @@ export function getLandmarker(): Promise<FaceLandmarker> {
     landmarkerP = (async () => {
       const { FaceLandmarker, FilesetResolver } = await import('@mediapipe/tasks-vision');
       const fileset = await FilesetResolver.forVisionTasks('/wasm');
+      fileset.wasmLoaderPath = assetUrl(fileset.wasmLoaderPath);
+      fileset.wasmBinaryPath = assetUrl(fileset.wasmBinaryPath);
       return FaceLandmarker.createFromOptions(fileset, {
-        baseOptions: { modelAssetPath: '/models/face_landmarker.task' },
+        baseOptions: { modelAssetPath: assetUrl('/models/face_landmarker.task') },
         runningMode: 'VIDEO',
         numFaces: 3,
         outputFaceBlendshapes: true,
       });
-    })();
+    })().catch((e) => {
+      landmarkerP = null;
+      throw e;
+    });
   }
   return landmarkerP;
 }

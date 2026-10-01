@@ -67,6 +67,8 @@ npm run dev        # --host로 LAN 공개 (실기기 테스트용)
 npm run build      # tsc 타입체크 + vite build → dist/
 npm run preview    # 빌드 결과 로컬 서빙
 npm run typecheck
+npx playwright install chromium  # 테스트 브라우저 설치 (최초 1회)
+npm test           # LUT·저장·카메라 수명주기·빌드 PWA 브라우저 회귀 테스트
 ```
 
 ## 배포 (Vercel)
@@ -107,6 +109,17 @@ docs/        architecture(구조 상세), troubleshooting(이슈/해결 기록),
 (여러 개 동시 선택 가능). 등록된 LUT는 기기 IndexedDB에 저장되며
 "커스텀 LUT 관리"에서 이름 변경/삭제할 수 있습니다.
 앱 삭제 시 함께 지워지니 원본 파일은 따로 보관하세요.
+
+- PNG/JPEG import는 **512×512, linear HaldCLUT** 레이아웃만 지원합니다.
+  일반 사진이나 tiled lookup 텍스처를 넣는 기능이 아닙니다.
+- "LUT 만들기"는 현재 LUT·강도와 색상 조절을 새 LUT에 저장합니다.
+  성공 후 포함된 색상 조절은 초기화되고 LUT 강도는 100%가 됩니다.
+  선명도·명료함·블룸·비네트·그레인·뷰티·프리셋 전용 이펙트는 굽지 않습니다.
+  조절 패널의 공간 효과 값은 유지되지만 원래 프리셋 전용 이펙트는 포함되지
+  않으므로 모든 효과가 있는 화면과 완전히 같아지는 기능은 아닙니다.
+- 생성 도중 설정을 바꿨다면 새 LUT는 목록에만 저장하고 변경한 설정을 유지합니다.
+- import는 파싱과 IndexedDB 쓰기 완료를 확인한 후에만 성공을 안내합니다.
+- 사진 편집 중에는 카메라를 중지하고, 카메라 모드로 돌아갈 때 다시 시작합니다.
 
 ## 라이선스 / 출처
 

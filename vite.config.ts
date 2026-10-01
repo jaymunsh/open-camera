@@ -1,8 +1,27 @@
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import { createHash } from 'node:crypto';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// Content-address runtime assets too: their filenames are not hashed by Vite.
+const hash = createHash('sha256');
+const publicRoot = fileURLToPath(new URL('./public/', import.meta.url));
+function hashDirectory(relative: string) {
+  for (const entry of readdirSync(join(publicRoot, relative), { withFileTypes: true })
+    .sort((a, b) => a.name.localeCompare(b.name))) {
+    const name = `${relative}/${entry.name}`;
+    if (entry.isDirectory()) hashDirectory(name);
+    else hash.update(name).update('\0').update(readFileSync(join(publicRoot, name))).update('\0');
+  }
+}
+for (const dir of ['luts', 'wasm', 'models']) hashDirectory(dir);
+const assetVersion = hash.digest('hex').slice(0, 16);
 
 export default defineConfig({
+  define: { __ASSET_VERSION__: JSON.stringify(assetVersion) },
   server: {
     allowedHosts: ['.trycloudflare.com'],
   },

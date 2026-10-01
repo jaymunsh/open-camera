@@ -118,6 +118,7 @@ export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewerRef = useRef<HTMLDivElement>(null);
   const pipeRef = useRef<FilterPipeline | null>(null);
+  const bakeRef = useRef<{ canvas: HTMLCanvasElement; pipe: FilterPipeline } | null>(null);
   const openRef = useRef<HTMLInputElement>(null);
   const hqRef = useRef<HTMLInputElement>(null);
   const cubeRef = useRef<HTMLInputElement>(null);
@@ -136,7 +137,7 @@ export default function App() {
     torchOk,
     torchOn,
     setTorch,
-  } = useCamera();
+  } = useCamera(mode === 'camera');
 
   const zoomOptions = useMemo(() => {
     if (!zoomCaps) return [] as number[];
@@ -364,7 +365,12 @@ export default function App() {
     const load = isCustom ? loadCustomLut(lutId) : loadPresetLut(lutId);
     load
       .then((l) => ok && setLoadedLuts((m) => ({ ...m, [lutId]: l })))
-      .catch((e) => setGlError((e as Error).message));
+      .catch((e) => {
+        if (!ok) return;
+        setGlError((e as Error).message);
+        // Return to an honest, usable state; selecting the filter again retries.
+        setLutId('none');
+      });
     return () => {
       ok = false;
     };
@@ -409,6 +415,8 @@ export default function App() {
 
   const paramsRef = useRef(params);
   paramsRef.current = params;
+  const editSettingsRef = useRef({ params, lutId, lutIntensity });
+  editSettingsRef.current = { params, lutId, lutIntensity };
   const beautyRef = useRef(beauty);
   beautyRef.current = beauty;
   const lutRef = useRef(applied);
@@ -596,6 +604,8 @@ export default function App() {
       );
       const r = await saveImage(blob, timestampName());
       if (r === 'shared' || r === 'downloaded') showToast('저장됨');
+    } catch (e) {
+      setGlError(e instanceof Error ? e.message : '이미지 저장에 실패했습니다');
     } finally {
       setBusy(false);
     }
@@ -652,6 +662,8 @@ export default function App() {
       );
       const r = await saveImage(blob, timestampName());
       if (r === 'shared' || r === 'downloaded') showToast('저장됨');
+    } catch (e) {
+      setGlError(e instanceof Error ? e.message : '이미지 저장에 실패했습니다');
     } finally {
       setBusy(false);
     }
@@ -689,6 +701,12 @@ export default function App() {
   );
 
   const bakeCustomLut = useCallback(async () => {
+    if (busy) return;
+    if (lutId !== 'none' && !loadedLuts[lutId]) {
+      setGlError('필터 로딩이 완료된 후 LUT를 만들어주세요');
+      return;
+    }
+    setBusy(true);
     try {
       const N = 64;
       const S = 512;
@@ -707,23 +725,47 @@ export default function App() {
       }
       hctx.putImageData(img, 0, 0);
 
-      const canvas = document.createElement('canvas');
-      canvas.width = canvas.height = S;
-      const pipe = new FilterPipeline(canvas);
+      // Reuse one context across bakes rather than accumulating WebGL contexts.
+      if (!bakeRef.current) {
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = S;
+        bakeRef.current = { canvas, pipe: new FilterPipeline(canvas) };
+      }
+      const { canvas, pipe } = bakeRef.current;
       pipe.setSource(hald);
-      pipe.setLUT('bake', lutId === 'none' ? null : (loadedLuts[lutId] ?? null));
-      pipe.render({ ...params, sharpen: 0, vignette: 0, grain: 0 }, lutId === 'none' ? 0 : lutIntensity);
+      pipe.setLUT(`bake-${lutId}`, lutId === 'none' ? null : (loadedLuts[lutId] ?? null));
+      pipe.render(
+        { ...params, sharpen: 0, clarity: 0, bloom: 0, vignette: 0, grain: 0 },
+        lutId === 'none' ? 0 : lutIntensity,
+      );
       const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/png'));
       if (!blob) throw new Error('LUT 생성 실패');
       const entry = await addCustomLut(`CUSTOM ${customs.length + 1}`, await blob.arrayBuffer(), 'png');
+      const lut = await loadCustomLut(entry.id);
+      setLoadedLuts((m) => ({ ...m, [entry.id]: lut }));
       setCustoms(listCustomLuts());
+      const latest = editSettingsRef.current;
+      if (latest.params !== params || latest.lutId !== lutId || latest.lutIntensity !== lutIntensity) {
+        showToast('커스텀 LUT로 저장됨 · 변경된 설정 유지');
+        return;
+      }
+      // Only baked color controls reset; spatial effects remain live controls.
+      setParams((p) => ({
+        ...DEFAULT_PARAMS,
+        sharpen: p.sharpen, clarity: p.clarity, bloom: p.bloom,
+        vignette: p.vignette, grain: p.grain,
+      }));
+      setLutIntensity(1);
+      setApplied({ key: `preset-${entry.id}`, lut, amount: 1, fx: null });
       setLutId(entry.id);
       setPanel('filters');
       showToast('커스텀 LUT로 저장됨');
     } catch (e) {
       setGlError((e as Error).message);
+    } finally {
+      setBusy(false);
     }
-  }, [lutId, loadedLuts, params, lutIntensity, customs.length, showToast]);
+  }, [busy, lutId, loadedLuts, params, lutIntensity, customs.length, showToast]);
 
   useEffect(() => {
     localStorage.setItem('oc-grid', gridOn ? '1' : '0');
@@ -810,7 +852,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <header>
+      <header className="app-header">
         <span className={`filter-name${pendingLut ? ' pending' : ''}`}>
           {customs.find((c) => c.id === lutId)?.name ?? PRESETS.find((p) => p.id === lutId)?.label}
         </span>
@@ -884,6 +926,7 @@ export default function App() {
                   커스텀 LUT 관리{customs.length ? ` (${customs.length})` : ''}
                 </button>
                 <button
+                  disabled={busy}
                   onClick={() => {
                     setMenuOpen(false);
                     void bakeCustomLut();
@@ -1314,13 +1357,23 @@ export default function App() {
         <CustomLutsModal
           customs={customs}
           onRename={(id, name) => {
-            renameCustomLut(id, name);
-            setCustoms(listCustomLuts());
+            try {
+              renameCustomLut(id, name);
+              setCustoms(listCustomLuts());
+            } catch (e) {
+              setGlError((e as Error).message);
+            }
           }}
           onDelete={async (id) => {
-            await removeCustomLut(id);
-            setCustoms(listCustomLuts());
-            if (lutId === id) setLutId('none');
+            try {
+              await removeCustomLut(id);
+            } catch (e) {
+              setGlError((e as Error).message);
+            } finally {
+              const list = listCustomLuts();
+              setCustoms(list);
+              if (lutId === id && !list.some((c) => c.id === id)) setLutId('none');
+            }
           }}
           onClose={() => setLutModalOpen(false)}
         />

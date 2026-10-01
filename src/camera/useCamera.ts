@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 export type Facing = 'user' | 'environment';
 
-export function useCamera() {
+export function useCamera(enabled = true) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const trackRef = useRef<MediaStreamTrack | null>(null);
   const [facing, setFacing] = useState<Facing>('environment');
@@ -22,6 +22,10 @@ export function useCamera() {
     setReady(false);
     setError(null);
     setZoomCaps(null);
+    setTorchOk(false);
+    setTorchOn(false);
+    trackRef.current = null;
+    if (!enabled) return;
 
     async function start() {
       if (!navigator.mediaDevices?.getUserMedia) {
@@ -48,6 +52,7 @@ export function useCamera() {
           v.srcObject = stream;
           await v.play().catch(() => {});
         }
+        if (cancelled) return;
         const track = stream.getVideoTracks()[0];
         trackRef.current = track;
         const caps = track.getCapabilities() as MediaTrackCapabilities & {
@@ -106,14 +111,21 @@ export function useCamera() {
       cancelled = true;
       document.removeEventListener('visibilitychange', onVis);
       stream?.getTracks().forEach((t) => t.stop());
+      trackRef.current = null;
+      const v = videoRef.current;
+      if (v?.srcObject === stream) {
+        v.pause();
+        v.srcObject = null;
+      }
     };
-  }, [facing, nonce]);
+  }, [enabled, facing, nonce]);
 
   const onLoaded = useCallback(() => {
+    if (!enabled) return;
     const v = videoRef.current;
     if (v && v.videoWidth) setSize({ w: v.videoWidth, h: v.videoHeight });
     setReady(true);
-  }, []);
+  }, [enabled]);
   const flip = useCallback(() => setFacing((f) => (f === 'user' ? 'environment' : 'user')), []);
 
   const setZoom = useCallback(

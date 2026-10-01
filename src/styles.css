@@ -17,21 +17,38 @@ body,
 }
 
 .app {
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+  --header-control-height: 38px;
+  --header-padding: 8px;
+  --header-height: calc(var(--safe-area-top) + var(--header-control-height) + 2 * var(--header-padding));
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding-top: env(safe-area-inset-top);
+  /* Reserve the fixed header's space so the preview keeps its existing size. */
+  padding-top: var(--header-height);
   padding-bottom: env(safe-area-inset-bottom);
   user-select: none;
   -webkit-user-select: none;
 }
 
-header {
+.app-header {
+  /* iOS 27 PWA blur workaround: an opaque bar touches the viewport's top edge,
+     including the safe area. OS blur suppression still needs device testing. */
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 20; /* Above preview overlays, below sheets (30) and modals (40). */
+  height: var(--header-height);
+  background: #000;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 14px;
-  flex: none;
+  padding: calc(var(--safe-area-top) + var(--header-padding))
+    max(14px, var(--safe-area-right)) var(--header-padding)
+    max(14px, var(--safe-area-left));
 }
 
 .logo {
@@ -81,6 +98,9 @@ header {
   display: flex;
   flex-direction: column;
   min-width: 180px;
+  max-height: calc(100dvh - var(--header-height) - 8px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 6px;
   border-radius: 14px;
   background: rgba(28, 28, 30, 0.96);
@@ -90,6 +110,7 @@ header {
 }
 
 .menu button {
+  flex: none;
   background: none;
   text-align: left;
   padding: 11px 14px;

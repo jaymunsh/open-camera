@@ -58,8 +58,8 @@ WebGL2 컨텍스트 위에 단일 풀스크린 삼각형 드로우로 모든 처
 1. 소스 샘플 (`uv` 변환 — mirror/uvScale/렌즈 왜곡/픽셀화)
 2. 얼굴 마스크 영역: 스무딩·톤·다크서클·잡티, face-wide(밝기/블러시/립/아이)
 3. 디지캠 플래시 (`u_flash`)
-4. LUT 적용 (`u_lut` × `u_lutAmount`)
-5. 기본 조절 (노출/대비/채도/색온도/틴트/하이라이트/쉐도우/화이트/블랙/비브란스/명료함)
+4. 기본 조절 (노출/대비/채도/색온도/틴트/하이라이트/쉐도우/화이트/블랙/비브란스/명료함/페이드)
+5. LUT 적용 (`u_lut` × `u_lutAmount`)
 6. 공간 이펙트: soft/bloom/halation(`textureLod` 낮은 밉 사용) → vignette → dust → cnoise → band → dclip → jpeg 블록 → 레드아이(사실상 비활성)
 7. 선명도, 그레인, 날짜 프레임 등
 
@@ -94,6 +94,8 @@ WebGL2 컨텍스트 위에 단일 풀스크린 삼각형 드로우로 모든 처
 - `enumerateDevices`로 후면 카메라 수 추정 (라벨 없으면 개수 기반)
 - `visibilitychange` 복귀 시 트랙 `ended`/비디오 `readyState<2`면
   `nonce++`로 재시작 — iOS에서 앱 전환 후 카메라가 죽는 문제 대응
+- `useCamera(enabled)`: 편집 모드는 disabled. 트랙을 stop하고 비디오 연결을
+  해제한다. 촬영 모드로 복귀하면 새 스트림을 시작한다.
 
 ## 얼굴 인식 / 뷰티 (`beauty/face.ts`)
 
@@ -118,8 +120,15 @@ WebGL2 컨텍스트 위에 단일 풀스크린 삼각형 드로우로 모든 처
 - `PRESETS`: `{ id, label, group, build?|file?, fx? }` — `file`은 `/luts/…` fetch
 - 커스텀 LUT: `addCustomLut`가 IndexedDB(`oc-store/lut-files`)에 바이너리 저장,
   목록 메타는 `localStorage['oc-custom']`의 `CustomEntry[]`
+- import는 파싱 후 IDB 트랜잭션 완료를 기다리고 목록을 등록한다. 목록 쓰기가
+  실패하면 새 바이너리를 정리한다. 삭제도 IDB 완료 후 목록을 갱신하며, 목록
+  갱신 실패 시 원래 바이너리를 복원한다. 두 저장소 사이 완전한 원자성은 없다.
+- 실패한 로드 Promise는 메모리 캐시에서 제거한다. HTTP 상태와 파싱 성공을
+  확인한 뒤 프리셋 바이너리 캐시를 쓴다. 손상된 프리셋 캐시는 다시 가져온다.
 - "현재 설정을 LUT로 굽기": identity 그리드를 현재 파이프라인에 통과시켜
-  새 `.cube`급 LUT 데이터로 저장
+  새 HaldCLUT PNG로 저장. 점별 색상 조절과 LUT 강도만 포함하고 공간·뷰티·
+  프리셋 이펙트는 제외한다. 성공하면 색상 조절을 초기화하고 강도를 1로 설정한다.
+  생성 중 설정 변경 시 목록에만 저장한다. 생성용 GL 컨텍스트는 재사용한다.
 
 ## 썸네일 (`thumbs.ts`)
 
@@ -152,6 +161,10 @@ WebGL2 컨텍스트 위에 단일 풀스크린 삼각형 드로우로 모든 처
 - `wasm/`(34MB)·`models/`는 **precache 제외** → 첫 설치 용량 절약,
   사용 시 `oc-ml` CacheFirst 런타임 캐시
 - `/luts/*`는 `oc-luts` CacheFirst — 한 번 쓴 필터는 오프라인 동작
+- `luts/wasm/models`의 파일명·내용을 SHA-256으로 해시해 `?v=<16자리>`를
+  요청 URL에 붙인다. WASM loader/binary와 모델도 같은 버전을 사용한다.
+  프리셋 IDB 키는 `lut-v2-<assetVersion>-<id>`이고 사용자 LUT 키는 유지한다.
+  public 자산 변경 후에는 개발 서버를 재시작해야 새 버전이 계산된다.
 - `vercel.json`: `/`, `sw.js`, `manifest.webmanifest` → `no-cache`,
   `luts|wasm|models` → immutable 1년, SPA rewrite → `/index.html`
 - 배포: `npx vercel --prod` (프로젝트: `leneu/open-camera`,
