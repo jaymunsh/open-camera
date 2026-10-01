@@ -805,6 +805,7 @@ export default function App() {
 
   const thumbKey = `${mode}-${ready}-${facing}-${editSrc ? `img${editToken}` : 'none'}`;
 
+  const centerFrame = ratio.w === 4 && ratio.h === 5;
   const frameRect = useMemo(() => {
     if (!viewSize.w || !viewSize.h) return null;
     const ta = ratio.w / ratio.h;
@@ -818,14 +819,13 @@ export default function App() {
       h = viewSize.h;
       w = h * ta;
     }
-    // small letterbox → hug the bottom (photo meets the controls like iOS
-    // camera); large letterbox (1:1) → center so the top gap stays balanced
+    // 4:5 always centers; other ratios keep their existing letterbox alignment.
     const padY = viewSize.h - h;
-    return { left: (viewSize.w - w) / 2, top: padY > 100 ? padY / 2 : padY, w, h };
-  }, [viewSize, ratio]);
+    return { left: (viewSize.w - w) / 2, top: centerFrame || padY > 100 ? padY / 2 : padY, w, h };
+  }, [viewSize, ratio, centerFrame]);
 
   valignRef.current =
-    frameRect && viewSize.h - frameRect.h > 100 ? 'center' : 'bottom';
+    centerFrame || (frameRect && viewSize.h - frameRect.h > 100) ? 'center' : 'bottom';
 
   const imgRect = useMemo(() => {
     if (mode === 'camera') return frameRect;
