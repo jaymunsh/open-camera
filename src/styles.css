@@ -17,6 +17,10 @@ body,
 }
 
 .app {
+  --camera-panel: #18181a;
+  --camera-control: #29292d;
+  --camera-muted: #b8b8c1;
+  --camera-accent: #8a7cff;
   --safe-area-top: env(safe-area-inset-top, 0px);
   --safe-area-left: env(safe-area-inset-left, 0px);
   --safe-area-right: env(safe-area-inset-right, 0px);
@@ -32,6 +36,49 @@ body,
   user-select: none;
   -webkit-user-select: none;
 }
+
+.camera-controls { display: contents; }
+.date-red { filter: none !important; }
+.exposure-guide { position: absolute; object-fit: fill; opacity: .35; pointer-events: none; }
+.capture-progress { position: absolute; left: 12px; right: 12px; top: 12px; display: flex; align-items: center; gap: 8px; width: fit-content; max-width: calc(100% - 24px); padding: 6px 8px 6px 12px; background: #151515; border-radius: 10px; font-size: 13px; z-index: 9; }
+.capture-progress span { font-variant-numeric: tabular-nums; }
+.capture-progress button { min-height: 38px; }
+.camera-dialog-back { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.7); display: flex; align-items: flex-end; justify-content: center; padding: max(12px, env(safe-area-inset-top)) max(0px, env(safe-area-inset-right)) 0 max(0px, env(safe-area-inset-left)); }
+.camera-dialog { background: var(--camera-panel); border-radius: 18px 18px 0 0; padding: 18px 18px max(18px, env(safe-area-inset-bottom)); width: 100%; max-width: 540px; max-height: 100%; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: #777 var(--camera-panel); }
+.camera-dialog-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 20px; }
+.camera-dialog-head h2 { font-size: 18px; font-weight: 650; }
+.camera-dialog button { min-height: 44px; background: var(--camera-control); }
+.camera-dialog button:disabled { opacity: .45; cursor: default; }
+.camera-dialog button:focus-visible, .camera-dialog input:focus-visible, .camera-dialog select:focus-visible { outline: 2px solid var(--camera-accent); outline-offset: 3px; }
+.camera-dialog button[aria-pressed="true"] { color: var(--camera-accent); outline: 1px solid var(--camera-accent); outline-offset: -1px; }
+.camera-field { border: 0; display: block; margin: 24px 0 12px; min-width: 0; font-size: 14px; }
+.camera-field legend { margin-bottom: 10px; font-weight: 600; }
+.camera-choices, .camera-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.camera-choices button { flex: 1 0 auto; }
+.camera-actions { margin-top: 16px; }
+.camera-note { font-size: 12px; color: var(--camera-muted); line-height: 1.6; margin: 10px 0 16px; }
+.camera-warning { color: #ffc2ab; font-size: 13px; line-height: 1.6; margin: 14px 0; }
+.camera-check { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 14px; margin-top: 14px; }
+.camera-check input { width: 20px; height: 20px; accent-color: var(--camera-accent); }
+.camera-range { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.camera-range input { width: 100%; accent-color: var(--camera-accent); min-height: 32px; }
+.camera-dialog .camera-primary { width: 100%; background: var(--camera-accent); color: #100d20; font-weight: 650; margin-top: 16px; }
+.camera-empty { color: var(--camera-muted); font-size: 14px; text-align: center; padding: 32px 12px; }
+.camera-field input:not([type="range"]):not([type="checkbox"]) { display: block; width: 100%; padding: 12px; margin-top: 8px; background: var(--camera-control); color: #f2f2f2; border: 0; border-radius: 8px; min-height: 44px; font: inherit; user-select: text; -webkit-user-select: text; }
+.camera-field input::placeholder { color: var(--camera-muted); }
+.history-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.camera-dialog .history-photo { padding: 0; background: none; text-align: left; overflow: hidden; border-radius: 0; }
+.history-photo img { width: 100%; aspect-ratio: 3/4; object-fit: cover; display: block; border-radius: 8px; }
+.history-photo span { display: block; font-size: 11px; margin: 6px 0 10px; color: var(--camera-muted); }
+.history-large, .capture-result { width: 100%; height: auto; max-height: 48dvh; object-fit: contain; display: block; background: #000; }
+.recipe-list { margin-top: 24px; }
+.recipe-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.recipe-row > button:first-child { flex: 1 1 100%; display: flex; justify-content: space-between; align-items: center; word-break: break-word; text-align: left; }
+.recipe-row span { color: var(--camera-accent); flex-shrink: 0; margin-left: 12px; }
+.reprocess-bar { flex: none; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; padding: 8px 14px; color: var(--camera-muted); }
+.reprocess-bar input { min-width: 80px; flex: 1; accent-color: var(--camera-accent); }
+.reprocess-bar select { background: var(--camera-control); color: #fff; padding: 8px; border: 0; border-radius: 8px; }
+@media (min-width: 768px) { .camera-dialog-back { align-items: center; padding: 24px; } .camera-dialog { border-radius: 16px; max-height: calc(100dvh - 48px); } }
 
 .app-header {
   /* iOS 27 PWA blur workaround: an opaque bar touches the viewport's top edge,

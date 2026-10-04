@@ -1,5 +1,6 @@
 import { FRAG_SHADER, VERT_SHADER } from './shaders';
-import { renderStampSoft, stampFontReady } from './datestamp';
+import { renderStampRed, renderStampSoft, stampFontReady } from './datestamp';
+import type { RenderLook } from './look';
 import { DEFAULT_PARAMS, type FilterParams, type FxSpec, type LutData } from './types';
 
 export interface RenderOpts {
@@ -10,6 +11,7 @@ export interface RenderOpts {
   ratio?: { w: number; h: number } | null;
   fx?: FxSpec | null;
   eyes?: { x: number; y: number; r: number }[];
+  look?: RenderLook;
 }
 
 const WARP_FRAG = `#version 300 es
@@ -102,6 +104,9 @@ const UNIFORMS = [
   'u_blacks',
   'u_bloom',
   'u_warp',
+  'u_gentle',
+  'u_creativeLens',
+  'u_creativeLensAmount',
 ];
 
 const SPOT_RADII: readonly (readonly [number, number])[] = [
@@ -532,6 +537,9 @@ export class FilterPipeline {
     gl.uniform1f(u.u_mirror, opts.mirror ? 1 : 0);
     gl.uniform1f(u.u_aspect, vw / vh);
     gl.uniform1f(u.u_time, opts.time ?? 0);
+    gl.uniform1f(u.u_gentle, opts.look?.gentle ? 1 : 0);
+    gl.uniform1f(u.u_creativeLens, opts.look?.lens === 'star' ? 1 : opts.look?.lens === 'prism' ? 2 : 0);
+    gl.uniform1f(u.u_creativeLensAmount, opts.look?.lensAmount ?? 0);
 
     if (opts.fx !== undefined) this.fx = opts.fx;
     const fx = this.fx;
@@ -620,8 +628,6 @@ export function exportSize(
 let expCanvas: HTMLCanvasElement | null = null;
 let expPipe: FilterPipeline | null = null;
 
-let exp2d: HTMLCanvasElement | null = null;
-
 export type DateFmt = 'yy' | 'iso' | 'ddmmyy' | 'ddmmyyyy' | 'mmddyyyy';
 
 export type DateSize = 'sm' | 'md' | 'lg';
@@ -659,7 +665,37 @@ export function dateLabel(d = new Date(), fmt: DateFmt = 'yy'): string {
   }
 }
 
-export async function exportFiltered(
+export interface DateStampOptions {
+  on: boolean;
+  fmt: DateFmt;
+  size: DateSize;
+  orient: 'auto' | 'p' | 'l';
+  style?: 'amber' | 'red';
+  timestamp?: number;
+}
+
+export async function drawDateStamp(canvas: HTMLCanvasElement, options: DateStampOptions): Promise<void> {
+  if (!options.on) return;
+  const { width: w, height: h } = canvas;
+  const ctx = canvas.getContext('2d')!;
+  const vert = options.orient === 'l' || (options.orient === 'auto' && w > h);
+  const stampH = h * (DATE_SIZES.find((s) => s.id === options.size)?.scale ?? .044);
+  const text = dateLabel(options.timestamp === undefined ? new Date() : new Date(options.timestamp), options.fmt);
+  ctx.save();
+  if (options.style === 'red') {
+    const s = renderStampRed(text, stampH * .6, w * .92, h * .936, vert);
+    ctx.drawImage(s.canvas, vert ? w * .04 : w * .96 - s.w, h * .968 - s.h, s.w, s.h);
+  } else {
+    await stampFontReady;
+    const s = renderStampSoft(text, Math.max(2, Math.round(stampH / 7)), vert);
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
+    ctx.shadowBlur = Math.round(h * .006);
+    ctx.drawImage(s.canvas, vert ? w * .045 : w - w * .045 - s.w, h - h * .035 - s.h, s.w, s.h);
+  }
+  ctx.restore();
+}
+
+export async function renderFilteredCanvas(
   src: TexImageSource,
   params: FilterParams,
   lutKey: string | null,
@@ -692,13 +728,9 @@ export async function exportFiltered(
   },
   warp: Float32Array | TexImageSource | null = null,
   eyes: { x: number; y: number; r: number }[] = [],
-  dateStamp: {
-    on: boolean;
-    fmt: DateFmt;
-    size: DateSize;
-    orient: 'auto' | 'p' | 'l';
-  } = { on: false, fmt: 'yy', size: 'md', orient: 'auto' },
-): Promise<Blob> {
+  dateStamp: DateStampOptions = { on: false, fmt: 'yy', size: 'md', orient: 'auto' },
+  look?: RenderLook,
+): Promise<HTMLCanvasElement> {
   if (!expCanvas) {
     expCanvas = document.createElement('canvas');
     expPipe = new FilterPipeline(expCanvas);
@@ -716,38 +748,17 @@ export async function exportFiltered(
   }
   expPipe!.setSource(src);
   expPipe!.setLUT(lutKey, lut);
-  expPipe!.render(params, lutAmount, { fit: 'contain', mirror, ratio, eyes });
+  expPipe!.render(params, lutAmount, { fit: 'contain', mirror, ratio, eyes, look });
 
-  let target: HTMLCanvasElement = expCanvas;
-  if (dateStamp.on) {
-    if (!exp2d) exp2d = document.createElement('canvas');
-    exp2d.width = out.w;
-    exp2d.height = out.h;
-    const ctx = exp2d.getContext('2d')!;
-    ctx.drawImage(expCanvas, 0, 0);
-    await stampFontReady;
-    const stampH =
-      out.h * (DATE_SIZES.find((s) => s.id === dateStamp.size)?.scale ?? 0.044);
-    const vert =
-      dateStamp.orient === 'l' ||
-      (dateStamp.orient === 'auto' && out.w > out.h);
-    const s = renderStampSoft(
-      dateLabel(new Date(), dateStamp.fmt),
-      Math.max(2, Math.round(stampH / 7)),
-      vert,
-    );
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
-    ctx.shadowBlur = Math.round(out.h * 0.006);
-    ctx.drawImage(
-      s.canvas,
-      vert ? out.w * 0.045 : out.w - out.w * 0.045 - s.w,
-      out.h - out.h * 0.035 - s.h,
-      s.w,
-      s.h,
-    );
-    target = exp2d;
-  }
+  const owned = document.createElement('canvas');
+  owned.width = out.w; owned.height = out.h;
+  owned.getContext('2d')!.drawImage(expCanvas, 0, 0);
+  await drawDateStamp(owned, dateStamp);
+  return owned;
+}
 
+export async function exportFiltered(...args: Parameters<typeof renderFilteredCanvas>): Promise<Blob> {
+  const target = await renderFilteredCanvas(...args);
   return new Promise((res, rej) =>
     target.toBlob(
       (b) => (b ? res(b) : rej(new Error('이미지 저장에 실패했습니다'))),

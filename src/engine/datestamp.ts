@@ -106,3 +106,23 @@ export function renderStampSoft(
   }
   return { canvas: out, w: out.width / 2, h: out.height / 2 };
 }
+
+export function renderStampRed(text: string, height: number, maxW: number, maxH: number, vertical = false): StampSpec {
+  const probe = document.createElement('canvas').getContext('2d')!;
+  probe.font = '40px monospace';
+  const widthRatio = (probe.measureText(text).width + 8) / 48;
+  const wantedH = Math.max(1, height);
+  const wantedW = wantedH * widthRatio;
+  const scale = Math.min(1, maxW / (vertical ? wantedH : wantedW), maxH / (vertical ? wantedW : wantedH));
+  const w = Math.max(.5, wantedW * scale), h = Math.max(.5, wantedH * scale);
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.floor((vertical ? h : w) * 2));
+  c.height = Math.max(1, Math.floor((vertical ? w : h) * 2));
+  const ctx = c.getContext('2d')!;
+  if (vertical) { ctx.translate(c.width, 0); ctx.rotate(Math.PI / 2); }
+  ctx.fillStyle = '#C94F43';
+  ctx.font = `${h * 2 * 40 / 48}px monospace`;
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, h * .15, h);
+  return { canvas: c, w: c.width / 2, h: c.height / 2 };
+}

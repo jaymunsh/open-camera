@@ -13,6 +13,8 @@ import {
   DATE_SIZES,
   dateLabel,
   exportFiltered,
+  renderFilteredCanvas,
+  exportSize,
   FilterPipeline,
   srcSize,
   type DateFmt,
@@ -32,20 +34,36 @@ import {
   smoothAndTrack,
 } from './beauty/face';
 import { saveImage } from './utils/share';
-import { renderStampSoft, stampFontReady } from './engine/datestamp';
+import { renderStampRed, renderStampSoft, stampFontReady } from './engine/datestamp';
+import { deriveFx, type RenderLook } from './engine/look';
+import { useCreativeCapture } from './capture/useCreativeCapture';
+import { canvasBlob, composeFrames, snapshotFrame } from './capture/composite';
+import type { CameraSettings, CapturedFrame, CaptureRecord, StampStyle } from './capture/types';
+import { validateSettings } from './capture/recipes';
+import { renderReprocessed, exportReprocessed } from './capture/reprocess';
+import { CreativeSettings, DEFAULT_CREATIVE } from './components/CreativeSettings';
+import { RecipeSheet } from './components/RecipeSheet';
+import { PhotoHistory } from './components/PhotoHistory';
+import { CaptureWorkspace } from './components/CaptureWorkspace';
 
 type Mode = 'camera' | 'edit';
 type Panel = 'filters' | 'adjust' | 'beauty';
-type EditSource = ImageBitmap | HTMLImageElement;
+type EditSource = ImageBitmap | HTMLImageElement | HTMLCanvasElement;
 
 function StampText({
   text,
   height,
   vertical = false,
+  style = 'amber',
+  maxW = Infinity,
+  maxH = Infinity,
 }: {
   text: string;
   height: number;
   vertical?: boolean;
+  style?: StampStyle;
+  maxW?: number;
+  maxH?: number;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -53,7 +71,7 @@ function StampText({
     void stampFontReady.then(() => {
       const cv = ref.current;
       if (!cv || !live) return;
-      const s = renderStampSoft(text, Math.max(2, Math.round(height / 7)), vertical);
+      const s = style === 'red' ? renderStampRed(text, height * .6, maxW, maxH, vertical) : renderStampSoft(text, Math.max(2, Math.round(height / 7)), vertical);
       cv.width = s.canvas.width;
       cv.height = s.canvas.height;
       cv.style.width = `${s.w}px`;
@@ -63,7 +81,7 @@ function StampText({
     return () => {
       live = false;
     };
-  }, [text, height, vertical]);
+  }, [text, height, vertical, style, maxW, maxH]);
   return <canvas ref={ref} className="stamp-canvas" />;
 }
 
@@ -113,7 +131,22 @@ export default function App() {
   const [licOpen, setLicOpen] = useState(false);
   const [lutModalOpen, setLutModalOpen] = useState(false);
   const [viewSize, setViewSize] = useState({ w: 0, h: 0 });
-  const ratio = RATIOS[ratioIdx];
+  const [creativeOpen, setCreativeOpen] = useState(false);
+  const [recipeOpen, setRecipeOpen] = useState(false);
+  const [creativeOptions, setCreativeOptions] = useState(DEFAULT_CREATIVE);
+  const [keepOriginal, setKeepOriginal] = useState(() => localStorage.getItem('oc-keep-original') === '1');
+  const [dateStyle, setDateStyle] = useState<StampStyle>(() => localStorage.getItem('oc-datestyle') === 'red' ? 'red' : 'amber');
+  const [reprocessRecord, setReprocessRecord] = useState<CaptureRecord | null>(null);
+  const captureFrameRef = useRef<(() => Promise<CapturedFrame>) | null>(null);
+  const creative = useCreativeCapture(() => captureFrameRef.current!(), setGlError);
+  const ratio = creative.mode === 'half' || creative.mode === 'booth' ? RATIOS[2] : creative.mode === 'double' && creative.frames.length ? RATIOS[creative.frames[0].settings.ratioIdx] : RATIOS[ratioIdx];
+  const cameraActive = mode === 'camera' && !creative.review && !creative.historyOpen;
+  const generalSettings: CameraSettings = { lutId, intensity: lutIntensity, params: { ...params }, beauty: { ...beauty }, ratioIdx, grainOff, ...creativeOptions, date: { mode: dateMode, fmt: dateFmt, size: dateSize, orient: dateOrient, style: dateStyle } };
+  const gentleAvailable = PRESETS.find((p) => p.id === lutId)?.group !== '디지캠' && !!PRESETS.find((p) => p.id === lutId)?.fx;
+  const look: RenderLook = { lens: creativeOptions.lens, lensAmount: creativeOptions.lensAmount, gentle: creativeOptions.gentle && gentleAvailable };
+  const lookRef = useRef(look); lookRef.current = look;
+  const recipeApplying = useRef(false);
+  useEffect(() => { try { localStorage.setItem('oc-datestyle', dateStyle); localStorage.setItem('oc-keep-original', keepOriginal ? '1' : '0'); } catch { /* defaults remain usable when storage is blocked */ } }, [dateStyle, keepOriginal]);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewerRef = useRef<HTMLDivElement>(null);
@@ -137,7 +170,7 @@ export default function App() {
     torchOk,
     torchOn,
     setTorch,
-  } = useCamera(mode === 'camera');
+  } = useCamera(cameraActive);
 
   const zoomOptions = useMemo(() => {
     if (!zoomCaps) return [] as number[];
@@ -243,10 +276,10 @@ export default function App() {
   const paramsDirty = (Object.keys(DEFAULT_PARAMS) as (keyof FilterParams)[]).some(
     (k) => params[k] !== DEFAULT_PARAMS[k],
   );
-  const canCompare = beautyOn || paramsDirty || lutId !== 'none';
+  const canCompare = beautyOn || paramsDirty || lutId !== 'none' || creativeOptions.lens !== 'none';
   const faceNeed = beautyOn || !!(PRESETS.find((p) => p.id === lutId)?.fx?.redeye ?? 0);
   useEffect(() => {
-    if (!faceNeed) {
+    if (!faceNeed || (mode === 'camera' && !cameraActive)) {
       beautyMask.current = null;
       warpPairs.current = null;
       maskDirty.current = true;
@@ -321,7 +354,7 @@ export default function App() {
       cancelled = true;
       clearInterval(iv);
     };
-  }, [faceNeed, mode, editSrc, videoRef]);
+  }, [faceNeed, mode, editSrc, videoRef, cameraActive]);
 
   // warm up the face model when the beauty tab opens (first detect feels instant)
   useEffect(() => {
@@ -394,7 +427,8 @@ export default function App() {
   const fxSeedRef = useRef(0.5);
   useEffect(() => {
     fxSeedRef.current = Math.random();
-    setGrainOff(false);
+    if (!recipeApplying.current) setGrainOff(false);
+    recipeApplying.current = false;
   }, [lutId]);
 
   useEffect(() => {
@@ -405,11 +439,11 @@ export default function App() {
       key: `preset-${lutId}`,
       lut,
       amount: lutId === 'none' ? 0 : lutIntensity,
-      fx: preset?.fx
+      fx: deriveFx(preset?.fx
         ? { ...preset.fx, grain: grainOff ? 0 : preset.fx.grain, seed: fxSeedRef.current }
-        : null,
+        : null, lutIntensity, creativeOptions.strengthMode, look.gentle),
     });
-  }, [lutId, lutReady, loadedLuts, lutIntensity, grainOff]);
+  }, [lutId, lutReady, loadedLuts, lutIntensity, grainOff, creativeOptions.strengthMode, look.gentle]);
 
   const showDate = dateMode === 'on' || (dateMode === 'auto' && !!applied.fx?.date);
 
@@ -511,7 +545,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (mode !== 'camera') return;
+    if (mode !== 'camera' || !cameraActive) return;
     let raf = 0;
     const tick = (t: number) => {
       const v = videoRef.current;
@@ -531,6 +565,7 @@ export default function App() {
           time: t * 0.001,
           ratio: ratioRef.current,
           fx: compareRef.current ? null : l.fx,
+          look: compareRef.current ? undefined : lookRef.current,
           eyes: !compareRef.current && (l.fx?.redeye ?? 0) > 0.001 ? eyePoints(getSmoothedFaces()) : undefined,
         });
       }
@@ -538,21 +573,31 @@ export default function App() {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [mode, ready, getPipe, videoRef]);
+  }, [mode, ready, getPipe, videoRef, cameraActive]);
 
   useEffect(() => {
     if (mode !== 'edit' || !editSrc) return;
     const p = getPipe();
     if (!p) return;
+    if (reprocessRecord && reprocessRecord.mode !== 'normal' && !compare) {
+      let live = true;
+      void renderReprocessed(reprocessRecord, { ...generalSettings, gentle: look.gentle }, applied.lut, applied.fx, false).then((source) => {
+        if (!live) return;
+        p.setBeautyMask(null, DEFAULT_BEAUTY); p.setWarpMap(null); maskDirty.current = true; warpDirty.current = true;
+        p.setSource(source); p.setLUT(null, null); p.render(DEFAULT_PARAMS, 0, { fit: 'contain', fx: null });
+      }).catch((e) => { if (live) setGlError((e as Error).message); });
+      return () => { live = false; };
+    }
     applyBeauty(p, compare);
     p.setSource(editSrc);
     p.setLUT(applied.key, applied.lut);
     p.render(compare ? DEFAULT_PARAMS : params, compare ? 0 : applied.amount, {
       fit: 'contain',
       fx: compare ? null : applied.fx,
+      look: compare ? undefined : look,
       eyes: !compare && (applied.fx?.redeye ?? 0) > 0.001 ? eyePoints(getSmoothedFaces()) : undefined,
     });
-  }, [mode, editSrc, params, applied, compare, getPipe, sizeTick, beauty, beautyTick]);
+  }, [mode, editSrc, params, applied, compare, getPipe, sizeTick, beauty, beautyTick, creativeOptions, look.gentle, reprocessRecord]);
 
   const getSource = useCallback((): TexImageSource | null => {
     if (mode === 'camera') {
@@ -564,23 +609,80 @@ export default function App() {
 
   const openImage = useCallback(async (f: File) => {
     try {
+      if (creative.frames.length && !window.confirm('진행 중인 촬영을 버리고 사진을 불러올까요?')) return;
+      creative.cancel();
       const src = await loadImageFile(f);
+      setReprocessRecord(null);
       setEditSrc(src);
       setEditToken((t) => t + 1);
       setMode('edit');
     } catch {
       setGlError('이미지를 불러올 수 없습니다');
     }
-  }, []);
+  }, [creative.frames.length, creative.cancel]);
+
+  const applyCameraSettings = async (value: CameraSettings) => {
+    const s = validateSettings(value);
+    if (s.lutId !== 'none' && !PRESETS.some((p) => p.id === s.lutId) && !customs.some((c) => c.id === s.lutId)) throw new Error('이 레시피의 사용자 LUT가 없습니다. LUT를 다시 가져와주세요.');
+    if (s.lutId !== 'none' && !loadedLuts[s.lutId]) {
+      const loaded = await (customs.some((c) => c.id === s.lutId) ? loadCustomLut(s.lutId) : loadPresetLut(s.lutId));
+      setLoadedLuts((rows) => ({ ...rows, [s.lutId]: loaded }));
+    }
+    recipeApplying.current = s.lutId !== lutId;
+    setLutId(s.lutId); setLutIntensity(s.intensity); setParams(s.params); setBeauty(s.beauty); setGrainOff(s.grainOff); setRatioIdx(s.ratioIdx);
+    setCreativeOptions({ strengthMode: s.strengthMode, gentle: s.gentle, lens: s.lens, lensAmount: s.lensAmount });
+    setDateMode(s.date.mode); setDateFmt(s.date.fmt); setDateSize(s.date.size); setDateOrient(s.date.orient); setDateStyle(s.date.style);
+  };
+
+  const reprocessPhoto = async (record: CaptureRecord) => {
+    if (!record.originals.length) throw new Error('이 사진에는 보관한 원본이 없습니다');
+    const sources: HTMLCanvasElement[] = [];
+    for (const blob of record.originals) {
+      const bitmap = await createImageBitmap(blob);
+      try { sources.push(snapshotFrame(bitmap, null, false, record.mode === 'normal' ? 4096 : 2048)); }
+      finally { bitmap.close(); }
+    }
+    const source = record.mode === 'normal' ? sources[0] : composeFrames(sources, record.mode, record.composition ?? {});
+    if (record.settings) {
+      try { await applyCameraSettings({ ...record.settings, beauty: { ...DEFAULT_BEAUTY } }); }
+      catch { setLutId('none'); setParams(DEFAULT_PARAMS); setBeauty(DEFAULT_BEAUTY); setCreativeOptions(DEFAULT_CREATIVE); showToast('촬영 필터가 없어 원본에서 시작합니다'); }
+    }
+    setReprocessRecord(record); setEditSrc(source); setEditToken((t) => t + 1); setMode('edit'); setPanel('filters'); creative.setHistoryOpen(false);
+  };
+
+  captureFrameRef.current = async () => {
+    const v = videoRef.current;
+    if (!v || v.readyState < 2 || !lutReady) throw new Error('카메라와 필터가 준비된 후 촬영해주세요');
+    setFlash((f) => f + 1);
+    const s = structuredClone(creative.mode === 'booth' && creative.frames.length ? creative.frames[0].settings : generalSettings);
+    const activeGentle = s.gentle && PRESETS.find((p) => p.id === s.lutId)?.group !== '디지캠';
+    const fx = creative.mode === 'booth' && creative.frames.length ? creative.frames[0].fx : deriveFx(PRESETS.find((p) => p.id === s.lutId)?.fx ? { ...PRESETS.find((p) => p.id === s.lutId)!.fx, grain: s.grainOff ? 0 : PRESETS.find((p) => p.id === s.lutId)!.fx?.grain, seed: fxSeedRef.current } : null, s.intensity, s.strengthMode, activeGentle);
+    const frozen = snapshotFrame(v, null, false, 2048);
+    const createdAt = Date.now();
+    const original = keepOriginal ? snapshotFrame(frozen, ratio, facing === 'user', 2048) : null;
+    const rendered = await renderFilteredCanvas(frozen, s.params, `preset-${s.lutId}`, s.lutId === 'none' ? null : loadedLuts[s.lutId], s.lutId === 'none' ? 0 : s.intensity, facing === 'user', ratio, fx, beautyMask.current, s.beauty,
+      warpGpuFail.current && lastSrcSize.current ? drawWarpField(getSmoothedFaces(), lastSrcSize.current.w, lastSrcSize.current.h, { eye: s.beauty.eye, slim: s.beauty.slim, nose: s.beauty.nose, head: s.beauty.head }) : warpPairs.current,
+      (fx?.redeye ?? 0) > .001 ? eyePoints(getSmoothedFaces()) : [], { on: false, fmt: s.date.fmt, size: s.date.size, orient: s.date.orient }, { lens: s.lens, lensAmount: s.lensAmount, gentle: activeGentle });
+    return { canvas: rendered, original, settings: s, createdAt, fx };
+  };
+
+  const actionLock = useRef(false);
 
   const capture = useCallback(async () => {
     const v = videoRef.current;
-    if (!v || v.readyState < 2 || busy) return;
+    if (!v || v.readyState < 2 || busy || actionLock.current) return;
+    actionLock.current = true;
     setBusy(true);
     setFlash((f) => f + 1);
     try {
+      const createdAt = Date.now();
+      const settings = structuredClone(generalSettings);
+      const frozen = keepOriginal ? snapshotFrame(v, null, false) : v;
+      const original = keepOriginal ? snapshotFrame(frozen, ratio, facing === 'user') : null;
+      const size = srcSize(frozen);
+      const output = exportSize(size.w, size.h, ratio);
       const blob = await exportFiltered(
-        v,
+        frozen,
         params,
         applied.key,
         applied.lut,
@@ -599,19 +701,26 @@ export default function App() {
             })
           : warpPairs.current,
         (applied.fx?.redeye ?? 0) > 0.001 ? eyePoints(getSmoothedFaces()) : [],
-        { on: showDate, fmt: dateFmt, size: dateSize, orient: dateOrient },
+        { on: showDate, fmt: dateFmt, size: dateSize, orient: dateOrient, style: dateStyle },
+        look,
       );
-      const r = await saveImage(blob, timestampName());
+      const name = timestampName();
+      void creative.remember({ id: crypto.randomUUID(), createdAt, blob, name, width: output.w, height: output.h, mode: 'normal', originals: [], settings }, original ? Promise.all([canvasBlob(original)]) : undefined);
+      const r = await saveImage(blob, name);
       if (r === 'shared' || r === 'downloaded') showToast('저장됨');
     } catch (e) {
       setGlError(e instanceof Error ? e.message : '이미지 저장에 실패했습니다');
     } finally {
+      actionLock.current = false;
       setBusy(false);
     }
-  }, [busy, facing, params, applied, videoRef, ratio, showToast, beauty, showDate, dateFmt, dateSize, dateOrient]);
+  }, [busy, facing, params, applied, videoRef, ratio, showToast, beauty, showDate, dateFmt, dateSize, dateOrient, dateStyle, creativeOptions, keepOriginal, creative.remember, grainOff, ratioIdx]);
+
+  const shutterAction = useRef<() => void>(() => {});
+  shutterAction.current = () => { if (creative.mode === 'normal') void capture(); else void creative.shoot(); };
 
   const shoot = useCallback(() => {
-    if (busy || count !== null) return;
+    if (busy || creative.working || count !== null || creative.countdown !== null) return;
     if (timerSec > 0) {
       let n = timerSec;
       setCount(n);
@@ -620,24 +729,27 @@ export default function App() {
         if (n <= 0) {
           clearInterval(countIv.current);
           setCount(null);
-          capture();
+          shutterAction.current();
         } else setCount(n);
       }, 1000);
     } else {
-      capture();
+      shutterAction.current();
     }
-  }, [busy, count, timerSec, capture]);
+  }, [busy, count, timerSec, creative.working, creative.countdown]);
 
   const cancelCountdown = useCallback(() => {
     clearInterval(countIv.current);
     setCount(null);
   }, []);
 
+  useEffect(() => { const hide = () => { if (document.hidden) cancelCountdown(); }; document.addEventListener('visibilitychange', hide); return () => { document.removeEventListener('visibilitychange', hide); cancelCountdown(); }; }, [cancelCountdown]);
+
   const saveEdit = useCallback(async () => {
     if (!editSrc || busy) return;
     setBusy(true);
     try {
-      const blob = await exportFiltered(
+      const compositeResult = reprocessRecord && reprocessRecord.mode !== 'normal' ? await exportReprocessed(reprocessRecord, { ...generalSettings, gentle: look.gentle }, applied.lut, applied.fx) : null;
+      const blob = compositeResult?.blob ?? await exportFiltered(
         editSrc,
         params,
         applied.key,
@@ -657,16 +769,19 @@ export default function App() {
             })
           : warpPairs.current,
         (applied.fx?.redeye ?? 0) > 0.001 ? eyePoints(getSmoothedFaces()) : [],
-        { on: showDate, fmt: dateFmt, size: dateSize, orient: dateOrient },
+        { on: showDate, fmt: dateFmt, size: dateSize, orient: dateOrient, style: dateStyle, timestamp: reprocessRecord ? reprocessRecord.shotAt ?? reprocessRecord.createdAt : undefined },
+        look,
       );
-      const r = await saveImage(blob, timestampName());
+      const name = timestampName();
+      if (reprocessRecord) { const size = srcSize(compositeResult?.canvas ?? editSrc); void creative.remember({ id: crypto.randomUUID(), createdAt: Date.now(), shotAt: reprocessRecord.shotAt ?? reprocessRecord.createdAt, blob, name, width: size.w, height: size.h, mode: reprocessRecord.mode, originals: keepOriginal ? [...reprocessRecord.originals] : [], settings: structuredClone(generalSettings), composition: reprocessRecord.composition }); }
+      const r = await saveImage(blob, name);
       if (r === 'shared' || r === 'downloaded') showToast('저장됨');
     } catch (e) {
       setGlError(e instanceof Error ? e.message : '이미지 저장에 실패했습니다');
     } finally {
       setBusy(false);
     }
-  }, [busy, editSrc, params, applied, showToast, beauty, showDate, dateFmt, dateSize, dateOrient]);
+  }, [busy, editSrc, params, applied, showToast, beauty, showDate, dateFmt, dateSize, dateOrient, dateStyle, creativeOptions, reprocessRecord, creative.remember, keepOriginal]);
 
   const importLut = useCallback(
     async (files: File[]) => {
@@ -843,6 +958,7 @@ export default function App() {
   const stampVert =
     dateOrient === 'l' ||
     (dateOrient === 'auto' && !!imgRect && imgRect.w > imgRect.h);
+  const guideImage = useMemo(() => creative.mode === 'double' && creative.frames[0] ? creative.frames[0].canvas.toDataURL('image/jpeg', .75) : null, [creative.mode, creative.frames]);
 
   return (
     <div className="app">
@@ -855,12 +971,13 @@ export default function App() {
             <>
               <button
                 className="icon-btn ratio-btn"
+                disabled={creative.mode === 'half' || creative.mode === 'booth' || (creative.mode === 'double' && creative.frames.length > 0)}
                 onClick={() => setRatioIdx((i) => (i + 1) % RATIOS.length)}
                 aria-label="비율"
               >
                 {ratio.label}
               </button>
-              <button className="icon-btn" onClick={flip} aria-label="카메라 전환">
+              <button className="icon-btn" disabled={creative.locked || busy || creative.working} onClick={flip} aria-label="카메라 전환">
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
                   <path d="M3 3v5h5" />
@@ -870,11 +987,11 @@ export default function App() {
               </button>
             </>
           )}
-          {mode === 'edit' && <button onClick={() => setMode('camera')}>카메라</button>}
+          {mode === 'edit' && <button disabled={busy} onClick={() => { setReprocessRecord(null); setMode('camera'); }}>카메라</button>}
           <div className="menu-wrap">
             <button
               className="icon-btn"
-              onClick={() => setMenuOpen((o) => !o)}
+              onClick={() => { if (!menuOpen) { cancelCountdown(); creative.pause(); } setMenuOpen((o) => !o); }}
               aria-label="메뉴"
             >
               <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
@@ -885,6 +1002,9 @@ export default function App() {
             </button>
             {menuOpen && (
               <div className="menu">
+                <button disabled={busy || creative.working} onClick={() => { cancelCountdown(); creative.pause(); setMenuOpen(false); creative.setHistoryOpen(true); }}>최근 촬영</button>
+                <button disabled={busy || creative.working} onClick={() => { cancelCountdown(); creative.pause(); setMenuOpen(false); setCreativeOpen(true); }}>촬영 모드 · 효과</button>
+                <button disabled={busy || creative.working || creative.locked || pendingLut} onClick={() => { setMenuOpen(false); setRecipeOpen(true); }}>카메라 레시피</button>
                 {mode === 'camera' && (
                   <button
                     onClick={() => {
@@ -983,10 +1103,16 @@ export default function App() {
       >
         <canvas ref={canvasRef} />
         <video ref={videoRef} playsInline muted autoPlay onLoadedData={onLoaded} />
+        {mode === 'camera' && guideImage && frameRect && !creative.review && <img className="exposure-guide" src={guideImage} alt="첫 촬영 구도 안내" style={{ left: frameRect.left, top: frameRect.top, width: frameRect.w, height: frameRect.h }} />}
+        {mode === 'camera' && creative.mode !== 'normal' && <div className="capture-progress" role="status" onPointerDown={(e) => e.stopPropagation()}>
+          <span>{creative.mode === 'half' ? '하프프레임' : creative.mode === 'booth' ? '네 컷' : '다중노출'} · {Math.min(creative.nextIndex + 1, creative.target)}/{creative.target}{creative.countdown !== null ? ` · ${creative.countdown}초` : ''}</span>
+          {creative.mode === 'booth' && creative.paused && creative.frames.length < 4 && creative.retakeIndex === null && <button onClick={creative.resume}>계속 촬영</button>}
+          {creative.frames.length > 0 && <button disabled={creative.working} onClick={() => { cancelCountdown(); creative.cancel(); }}>취소</button>}
+        </div>}
         {compare && <div className="compare-tag">원본</div>}
         {!compare && showDate && imgRect && (
           <div
-            className="date-stamp"
+            className={`date-stamp${dateStyle === 'red' ? ' date-red' : ''}`}
             style={
               stampVert
                 ? {
@@ -1005,9 +1131,12 @@ export default function App() {
             onClick={() => setDateSheet(true)}
           >
             <StampText
-              text={dateLabel(new Date(), dateFmt)}
-              height={Math.max(11, imgRect.h * dateScale)}
+              text={dateLabel(reprocessRecord ? new Date(reprocessRecord.shotAt ?? reprocessRecord.createdAt) : new Date(), dateFmt)}
+              height={dateStyle === 'red' ? imgRect.h * dateScale : Math.max(11, imgRect.h * dateScale)}
               vertical={stampVert}
+              style={dateStyle}
+              maxW={imgRect.w * .92}
+              maxH={imgRect.h * .936}
             />
           </div>
         )}
@@ -1082,6 +1211,11 @@ export default function App() {
 
       <InstallHint />
 
+      {reprocessRecord && <div className="reprocess-bar"><span>원본에서 다시 현상 · 미용 보정 {reprocessRecord.mode !== 'normal' ? '미지원' : '기본 꺼짐'}</span>
+        {reprocessRecord.mode === 'double' && <><select aria-label="재현상 혼합 방식" value={reprocessRecord.composition?.blend ?? 'average'} onChange={(e) => setReprocessRecord({ ...reprocessRecord, composition: { ...creative.options, ...reprocessRecord.composition, blend: e.target.value as 'average' | 'lighten' | 'multiply' } })}><option value="average">평균</option><option value="lighten">밝게</option><option value="multiply">곱하기</option></select><input aria-label="재현상 겹침 비율" type="range" min={0} max={1} step={.01} value={reprocessRecord.composition?.mix ?? .5} onChange={(e) => setReprocessRecord({ ...reprocessRecord, composition: { ...creative.options, ...reprocessRecord.composition, mix: Number(e.target.value) } })} /></>}
+      </div>}
+
+      <div className="camera-controls" inert={creative.locked}>
       {panel === 'beauty' ? (
         <BeautyPanel
           beauty={beauty}
@@ -1114,10 +1248,12 @@ export default function App() {
           lutEnabled={lutId !== 'none'}
         />
       )}
+      </div>
 
       <div className="dock">
         <button
           className={`dock-btn${panel === 'filters' ? ' on' : ''}`}
+          disabled={creative.locked}
           onClick={() => setPanel('filters')}
           aria-label="필터"
         >
@@ -1131,7 +1267,7 @@ export default function App() {
         {mode === 'camera' ? (
           <button
             className="shutter"
-            disabled={!ready || busy}
+            disabled={!ready || busy || creative.working || creative.countdown !== null || pendingLut}
             onClick={shoot}
             aria-label="촬영"
           >
@@ -1145,6 +1281,7 @@ export default function App() {
         <div className="dock-group">
           <button
             className={`dock-btn${panel === 'beauty' ? ' on' : ''}`}
+            disabled={creative.locked || !!(reprocessRecord && reprocessRecord.mode !== 'normal')}
             onClick={() => setPanel('beauty')}
             aria-label="보정"
           >
@@ -1157,6 +1294,7 @@ export default function App() {
           </button>
           <button
             className={`dock-btn${panel === 'adjust' ? ' on' : ''}`}
+            disabled={creative.locked}
             onClick={() => setPanel('adjust')}
             aria-label="조절"
           >
@@ -1225,6 +1363,9 @@ export default function App() {
           <div className="date-sheet" onClick={(e) => e.stopPropagation()}>
             <div className="ds-title">날짜 스탬프</div>
             <div className="ds-row">
+              {([['amber', '주황 디지캠'], ['red', '빨간 아날로그']] as const).map(([id, label]) => <button key={id} className={dateStyle === id ? 'on' : ''} onClick={() => setDateStyle(id)}>{label}</button>)}
+            </div>
+            <div className="ds-row">
               {(
                 [
                   ['auto', '자동'],
@@ -1283,6 +1424,11 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {creativeOpen && <CreativeSettings mode={creative.mode} options={creativeOptions} originals={keepOriginal} locked={creative.locked} gentleAvailable={gentleAvailable} onMode={(next) => { if (mode === 'edit') { setReprocessRecord(null); setMode('camera'); } cancelCountdown(); creative.changeMode(next); }} onOptions={setCreativeOptions} onOriginals={setKeepOriginal} onClose={() => setCreativeOpen(false)} />}
+      {recipeOpen && <RecipeSheet settings={generalSettings} onApply={applyCameraSettings} onClose={() => setRecipeOpen(false)} />}
+      {creative.historyOpen && <PhotoHistory records={creative.records} warning={creative.warning} onClose={() => creative.setHistoryOpen(false)} onDelete={creative.remove} onReprocess={reprocessPhoto} />}
+      {creative.review && <CaptureWorkspace capture={creative} />}
 
       {licOpen && (
         <div className="sheet-back" onClick={() => setLicOpen(false)}>

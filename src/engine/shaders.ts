@@ -67,6 +67,9 @@ uniform float u_whites;
 uniform float u_blacks;
 uniform float u_bloom;
 uniform sampler2D u_warp;
+uniform float u_gentle;
+uniform float u_creativeLens;
+uniform float u_creativeLensAmount;
 
 in vec2 v_uv;
 out vec4 frag;
@@ -444,6 +447,10 @@ void main() {
     float l1 = smoothstep(0.5, 0.0, distance(v_uv, p1));
     float l2 = smoothstep(0.35, 0.0, distance(v_uv, p2));
     vec3 leak = vec3(1.0, 0.38, 0.10) * l1 + vec3(1.0, 0.55, 0.18) * l2 * 0.6;
+    if (u_gentle > 0.5) {
+      float edge = min(min(v_uv.x, 1.0-v_uv.x), min(v_uv.y, 1.0-v_uv.y));
+      leak *= 1.0 - smoothstep(0.0, 0.2, edge);
+    }
     c = 1.0 - (1.0 - c) * (1.0 - leak * u_leakAmt);
   }
 
@@ -509,6 +516,7 @@ void main() {
 
   if (u_grain > 0.001) {
     vec2 gp = v_uv / max(u_texel * 768.0, vec2(1e-4));
+    if (u_gentle > 0.5) gp *= 2.0;
     vec2 guv = v_uv * vec2(u_aspect, 1.0);
     vec2 o1 = vec2(fract(u_time * 0.731), fract(u_time * 0.379));
     vec2 o2 = vec2(fract(u_time * 1.113), fract(u_time * 0.877));
@@ -520,6 +528,27 @@ void main() {
     c += n * clump * w * u_grain * 0.55;
   }
 
+  if (u_creativeLensAmount > 0.001 && u_creativeLens > 0.5) {
+    if (u_creativeLens < 1.5) {
+      vec3 rays = vec3(0.0);
+      for (int i = 1; i <= 8; i++) {
+        float stepSize = float(i) * 0.004;
+        vec2 d = vec2(stepSize / u_aspect, stepSize) * u_uvScale;
+        vec3 s1 = texture(u_src, uv + d).rgb;
+        vec3 s2 = texture(u_src, uv - d).rgb;
+        vec3 s3 = texture(u_src, uv + vec2(d.x, -d.y)).rgb;
+        vec3 s4 = texture(u_src, uv + vec2(-d.x, d.y)).rgb;
+        rays += (max(s1-.8, 0.0) + max(s2-.8, 0.0) + max(s3-.8, 0.0) + max(s4-.8, 0.0)) * (1.0 - float(i)/9.0);
+      }
+      c += rays * u_creativeLensAmount * .32;
+    } else {
+      float edge = 1.0 - smoothstep(0.0, .2, min(v_uv.x, 1.0-v_uv.x));
+      float direction = v_uv.x < .5 ? 1.0 : -1.0;
+      vec2 off = vec2(direction * .045, .015) * u_uvScale;
+      vec3 ghost = vec3(texture(u_src, uv+off*1.15).r, texture(u_src, uv+off).g, texture(u_src, uv+off*.85).b);
+      c = mix(c, ghost, edge * u_creativeLensAmount * .5);
+    }
+  }
   frag = vec4(clamp(c, 0.0, 1.0), 1.0);
 }
 `;
