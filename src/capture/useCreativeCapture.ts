@@ -4,7 +4,7 @@ import { saveImage } from '../utils/share';
 import { timestampName } from '../utils/image';
 import { canvasBlob, composeFrames } from './composite';
 import { deleteCapture, listCaptures, saveCapture } from './store';
-import { DEFAULT_COMPOSITION, type CaptureMode, type CapturedFrame, type CaptureRecord } from './types';
+import { DEFAULT_COMPOSITION, type BoothMethod, type CaptureMode, type CapturedFrame, type CaptureRecord } from './types';
 
 function recent(rows: CaptureRecord[]) {
   const unique = [...new Map(rows.map((r) => [r.id, r])).values()].sort((a, b) => b.createdAt - a.createdAt);
@@ -12,6 +12,7 @@ function recent(rows: CaptureRecord[]) {
 }
 export function useCreativeCapture(captureFrame: () => Promise<CapturedFrame>, onError: (message: string) => void) {
   const [mode, setModeState] = useState<CaptureMode>('normal');
+  const [boothMethod, setBoothMethod] = useState<BoothMethod>('auto');
   const [frames, setFrames] = useState<CapturedFrame[]>([]);
   const [review, setReview] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -63,6 +64,10 @@ export function useCreativeCapture(captureFrame: () => Promise<CapturedFrame>, o
   };
   const cancel = useCallback(() => { generation.current++; remembered.current = null; setFrames([]); setReview(false); setPrepared(null); setPreview(null); setFailure(null); setRetakeIndex(null); setPaused(false); setCountdown(null); }, []);
   const pause = () => { if (mode === 'booth' && frames.length > 0) { setPaused(true); setCountdown(null); } };
+  const changeBoothMethod = (next: BoothMethod) => {
+    if (frames.length || working || lock.current) return;
+    setBoothMethod(next); setPaused(false);
+  };
   const changeMode = (next: CaptureMode) => {
     if (next === mode) return;
     if (frames.length && !window.confirm('진행 중인 촬영을 버리고 모드를 바꿀까요?')) return;
@@ -85,11 +90,11 @@ export function useCreativeCapture(captureFrame: () => Promise<CapturedFrame>, o
   }, [frames, mode, retakeIndex, review, target]);
   const shootRef = useRef(shoot); shootRef.current = shoot;
   useEffect(() => {
-    if (mode !== 'booth' || !frames.length || frames.length >= 4 || working || paused || review || retakeIndex !== null || historyOpen) return;
+    if (mode !== 'booth' || boothMethod !== 'auto' || !frames.length || frames.length >= 4 || working || paused || review || retakeIndex !== null || historyOpen) return;
     let n = 3; setCountdown(n);
     const iv = window.setInterval(() => { n--; setCountdown(n || null); if (n <= 0) { clearInterval(iv); void shootRef.current(); } }, 1000);
     return () => { clearInterval(iv); setCountdown(null); };
-  }, [frames.length, mode, paused, working, review, retakeIndex, historyOpen]);
+  }, [frames.length, mode, boothMethod, paused, working, review, retakeIndex, historyOpen]);
   useEffect(() => {
     const hide = () => { if (document.hidden && mode === 'booth') { setPaused(true); setCountdown(null); } };
     document.addEventListener('visibilitychange', hide);
@@ -125,7 +130,7 @@ export function useCreativeCapture(captureFrame: () => Promise<CapturedFrame>, o
     catch (e) { setFailure(e instanceof Error ? e.message : '저장에 실패했습니다'); }
     finally { lock.current = false; setWorking(false); }
   };
-  return { mode, changeMode, frames, review, historyOpen, setHistoryOpen, records, warning, failure, working, options, setOptions, countdown, paused, pause, resume: () => setPaused(false), retakeIndex, prepared, preview, remember, remove, cancel, shoot, retake, saveReview,
+  return { mode, changeMode, boothMethod, changeBoothMethod, frames, review, historyOpen, setHistoryOpen, records, warning, failure, working, options, setOptions, countdown, paused, pause, resume: () => setPaused(false), retakeIndex, prepared, preview, remember, remove, cancel, shoot, retake, saveReview,
     locked: mode === 'booth' && frames.length > 0 && !review,
     nextIndex: retakeIndex === null ? frames.length : retakeIndex,
     target,

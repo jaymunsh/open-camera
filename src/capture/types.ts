@@ -3,6 +3,7 @@ import type { DateFmt, DateSize } from '../engine/pipeline';
 import type { FilterParams, FxSpec } from '../engine/types';
 
 export type CaptureMode = 'normal' | 'half' | 'booth' | 'double';
+export type BoothMethod = 'auto' | 'manual';
 export type BlendMode = 'average' | 'lighten' | 'multiply';
 export type LensMode = 'none' | 'star' | 'prism';
 export type StampStyle = 'amber' | 'red';

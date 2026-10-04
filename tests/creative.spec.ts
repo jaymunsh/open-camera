@@ -132,6 +132,7 @@ test('four-shot booth finishes once and supports a single-frame retake', async (
   await page.getByRole('button', { name: '네 컷', exact: true }).click(); await page.getByRole('button', { name: '닫기', exact: true }).click();
   await page.getByRole('button', { name: '촬영', exact: true }).click();
   await expect(page.getByRole('dialog', { name: '촬영 확인' })).toBeVisible({ timeout: 20000 });
+  await page.getByText('배치 · 여백', { exact: true }).click();
   await page.getByRole('button', { name: '세로 스트립', exact: true }).click();
   await expect(page.getByRole('button', { name: '공유 / 저장', exact: true })).toBeEnabled();
   const size = await page.locator('.capture-result').evaluate((c: HTMLCanvasElement) => [c.width, c.height]);
@@ -234,6 +235,7 @@ test('composition encoding failure is visible inside review and permits cancel',
   await page.evaluate(() => { HTMLCanvasElement.prototype.toBlob = function (callback) { callback(null); }; });
   await page.getByRole('button', { name: '촬영', exact: true }).click();
   await expect(page.getByRole('dialog', { name: '촬영 확인' }).getByRole('alert')).toContainText('실패');
+  await expect(page.locator('.capture-result')).toHaveAttribute('aria-busy', 'false');
   await expect(page.getByRole('dialog', { name: '촬영 확인' }).getByRole('button', { name: '닫기', exact: true })).toBeEnabled();
 });
 
@@ -270,6 +272,7 @@ test('retrying a canceled composition share keeps one history record', async ({ 
   await page.getByRole('button', { name: '촬영', exact: true }).click();
   const save = page.getByRole('button', { name: '공유 / 저장', exact: true });
   await expect(save).toBeEnabled(); await save.click(); await expect(save).toBeEnabled(); await save.click();
+  page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: '닫기', exact: true }).click(); await menu(page, '최근 촬영');
   await expect(page.locator('.history-photo')).toHaveCount(1);
 });

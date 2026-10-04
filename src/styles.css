@@ -40,9 +40,20 @@ body,
 .camera-controls { display: contents; }
 .date-red { filter: none !important; }
 .exposure-guide { position: absolute; object-fit: fill; opacity: .35; pointer-events: none; }
-.capture-progress { position: absolute; left: 12px; right: 12px; top: 12px; display: flex; align-items: center; gap: 8px; width: fit-content; max-width: calc(100% - 24px); padding: 6px 8px 6px 12px; background: #151515; border-radius: 10px; font-size: 13px; z-index: 9; }
+.capture-progress { position: absolute; left: 12px; right: 12px; top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; width: fit-content; max-width: calc(100% - 24px); padding: 6px 8px 6px 12px; background: #151515; border-radius: 10px; font-size: 13px; z-index: 9; }
 .capture-progress span { font-variant-numeric: tabular-nums; }
-.capture-progress button { min-height: 38px; }
+.capture-progress button { min-height: 44px; }
+.booth-method { display: flex; gap: 2px; }
+.booth-method button { padding: 8px 10px; }
+.booth-method button[aria-pressed="true"] { background: var(--camera-accent); color: #100d20; }
+.booth-method button:disabled { opacity: .6; }
+/* Keep the automatic action bar beside the tiny frame on short landscape screens.
+   The countdown remains visible in the current cell; the unused method is locked. */
+@media (max-height: 480px) and (min-width: 600px) {
+  .capture-progress { font-size: 12px; gap: 6px; padding: 4px 6px; }
+  .capture-progress button { padding: 8px 10px; }
+  .booth-method button:disabled[aria-pressed="false"], .progress-countdown { display: none; }
+}
 .capture-preview { position: absolute; inset: 0; background: #000; pointer-events: none; }
 .capture-frame { position: absolute; }
 .viewer .capture-frame canvas { width: 100%; height: 100%; display: block; }
@@ -87,6 +98,21 @@ body,
 .history-photo img { width: 100%; aspect-ratio: 3/4; object-fit: cover; display: block; border-radius: 8px; }
 .history-photo span { display: block; font-size: 11px; margin: 6px 0 10px; color: var(--camera-muted); }
 .history-large, .capture-result { width: 100%; height: auto; max-height: 48dvh; object-fit: contain; display: block; background: #000; }
+.capture-workspace { display: flex; flex-direction: column; overflow: hidden; padding: 0; }
+.capture-workspace .camera-dialog-head { flex: none; margin: 0; padding: 16px 18px; }
+.capture-review-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 18px 16px; scrollbar-color: var(--camera-muted) var(--camera-panel); }
+.capture-workspace .capture-result { max-height: 42dvh; }
+.capture-retake-hint { font-size: 13px; line-height: 1.5; margin: 18px 0 10px; }
+.capture-retakes { display: grid; gap: 8px; }
+.capture-retakes button { min-width: 0; padding: 0; overflow: hidden; border-radius: 8px; }
+.capture-retakes canvas { display: block; width: 100%; height: 72px; object-fit: contain; background: #000; }
+.capture-retakes span { display: block; padding: 10px 2px; font-size: 12px; line-height: 1.4; white-space: nowrap; }
+.capture-layout { margin-top: 20px; border-top: 1px solid var(--camera-control); }
+.capture-layout summary { min-height: 44px; padding: 14px 0; font-size: 14px; cursor: pointer; }
+.capture-layout summary:focus-visible { outline: 2px solid var(--camera-accent); outline-offset: -2px; }
+.capture-layout .camera-field { margin-top: 12px; }
+.capture-workspace .camera-dialog-foot { flex: none; padding: 12px 18px max(18px, env(safe-area-inset-bottom)); border-top: 1px solid var(--camera-control); background: var(--camera-panel); }
+.capture-workspace .camera-primary { margin: 0; }
 .recipe-list { margin-top: 24px; }
 .recipe-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .recipe-row > button:first-child { flex: 1 1 100%; display: flex; justify-content: space-between; align-items: center; word-break: break-word; text-align: left; }
