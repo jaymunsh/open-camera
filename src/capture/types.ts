@@ -23,8 +23,9 @@ export interface CameraSettings {
 export interface CompositionOptions {
   blend: BlendMode;
   mix: number;
-  layout: 'grid' | 'strip';
+  layout: 'grid' | 'strip' | 'row';
   paper: 'white' | 'black';
+  frame?: 'plain' | 'memory' | 'film';
 }
 export const DEFAULT_COMPOSITION: CompositionOptions = { blend: 'average', mix: .5, layout: 'grid', paper: 'white' };
 export interface CaptureRecord {

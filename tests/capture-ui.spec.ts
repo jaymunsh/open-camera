@@ -12,17 +12,18 @@ async function choose(page: Page, mode: string, ratio: string) {
   await page.getByRole('button', { name: '닫기', exact: true }).click();
 }
 
-test('recent thumbnail opens history beside Filter without shifting the shutter', async ({ page }) => {
+test('recent thumbnail opens history before header ratio without shifting the shutter', async ({ page }) => {
   await page.goto('/');
   const thumbnail = page.getByRole('button', { name: '최근 촬영 열기', exact: true });
   await expect(thumbnail).toHaveCount(0);
   const download = page.waitForEvent('download'); await page.getByRole('button', { name: '촬영', exact: true }).click(); await download;
   await expect(thumbnail.locator('img')).toBeVisible();
-  const filter = (await page.getByRole('button', { name: '필터', exact: true }).boundingBox())!;
+  const ratio = (await page.getByRole('button', { name: '비율', exact: true }).boundingBox())!;
   const thumb = (await thumbnail.boundingBox())!;
   const shutter = (await page.getByRole('button', { name: '촬영', exact: true }).boundingBox())!;
-  expect(thumb.x).toBeGreaterThan(filter.x + filter.width - 1);
-  expect(thumb.x + thumb.width).toBeLessThan(shutter.x + 1);
+  expect(await thumbnail.evaluate((el) => !!el.closest('header'))).toBe(true);
+  expect(thumb.x + thumb.width).toBeLessThanOrEqual(ratio.x);
+  expect(thumb.y).toBe(ratio.y);
   expect(Math.abs(shutter.x + shutter.width / 2 - 195)).toBeLessThan(1);
   await thumbnail.click(); await expect(page.getByRole('dialog', { name: '최근 촬영' })).toBeVisible();
   await expect(page.locator('.history-photo')).toHaveCount(1);
@@ -84,7 +85,9 @@ const viewer = (await page.locator('.viewer').boundingBox())!, mini = (await pag
     const shutter = (await page.getByRole('button', { name: '촬영', exact: true }).boundingBox())!;
     expect(Math.abs(shutter.x + shutter.width / 2 - width / 2)).toBeLessThan(1);
     const thumb = (await page.getByRole('button', { name: '최근 촬영 열기', exact: true }).boundingBox())!;
-    expect(thumb.x + thumb.width).toBeLessThan(shutter.x + 1);
+    const ratio = (await page.getByRole('button', { name: '비율', exact: true }).boundingBox())!;
+    expect(thumb.x + thumb.width).toBeLessThanOrEqual(ratio.x);
+    expect(thumb.y).toBe(ratio.y);
     await expect(page.locator('.flash')).toHaveCSS('opacity', '0');
     await page.screenshot({ path: `test-results/capture-ui-${width}x${height}.png` });
   });
@@ -120,7 +123,7 @@ test('lens comparison shows the same photo with and without edge refraction', as
   const encoded = await page.evaluate(() => { const c = document.createElement('canvas'); c.width = c.height = 256; const ctx = c.getContext('2d')!; for (let x = 0; x < 256; x += 8) { ctx.fillStyle = ['#f00', '#0f0', '#00f'][Math.floor(x / 8) % 3]; ctx.fillRect(x, 0, 8, 256); } return c.toDataURL('image/png').split(',')[1]; });
   await page.locator('input[type=file]').first().setInputFiles({ name: 'stripes.png', mimeType: 'image/png', buffer: Buffer.from(encoded, 'base64') });
   await expect(page.getByRole('button', { name: '저장', exact: true })).toBeEnabled();
-  await settings(page); await page.getByRole('button', { name: '가장자리 굴절', exact: true }).click();
+  await settings(page); await page.getByRole('tab', { name: '효과', exact: true }).click(); await page.getByRole('button', { name: '가장자리 굴절', exact: true }).click();
   const base = page.getByLabel('렌즈 없음 비교', { exact: true }); const effect = page.getByLabel('가장자리 굴절 비교', { exact: true });
   await expect.poll(() => effect.evaluate((c: HTMLCanvasElement) => c.width)).toBeGreaterThan(0);
   const sample = (locator: typeof base, x: number) => locator.evaluate((c: HTMLCanvasElement, xpos) => Array.from(c.getContext('2d')!.getImageData(xpos, Math.floor(c.height / 2), 1, 1).data), x);

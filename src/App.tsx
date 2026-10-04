@@ -41,7 +41,7 @@ import { canvasBlob, composeFrames, compositionLayout, snapshotFrame } from './c
 import type { CameraSettings, CapturedFrame, CaptureRecord, StampStyle } from './capture/types';
 import { validateSettings } from './capture/recipes';
 import { renderReprocessed, exportReprocessed } from './capture/reprocess';
-import { CreativeSettings, DEFAULT_CREATIVE } from './components/CreativeSettings';
+import { CreativeSettings, DEFAULT_CREATIVE, type StudioTab } from './components/CreativeSettings';
 import { RecipeSheet } from './components/RecipeSheet';
 import { BlobPhoto, PhotoHistory } from './components/PhotoHistory';
 import { CaptureWorkspace } from './components/CaptureWorkspace';
@@ -138,6 +138,7 @@ export default function App() {
   const [lutModalOpen, setLutModalOpen] = useState(false);
   const [viewSize, setViewSize] = useState({ w: 0, h: 0 });
   const [creativeOpen, setCreativeOpen] = useState(false);
+  const [studioTab, setStudioTab] = useState<StudioTab>('templates');
   const [recipeOpen, setRecipeOpen] = useState(false);
   const [creativeOptions, setCreativeOptions] = useState(DEFAULT_CREATIVE);
   const [keepOriginal, setKeepOriginal] = useState(() => localStorage.getItem('oc-keep-original') === '1');
@@ -985,6 +986,12 @@ export default function App() {
     dateOrient === 'l' ||
     (dateOrient === 'auto' && !!imgRect && imgRect.w > imgRect.h);
   const guideImage = useMemo(() => creative.mode === 'double' && creative.frames[0] ? creative.frames[0].canvas.toDataURL('image/jpeg', .75) : null, [creative.mode, creative.frames]);
+  const openStudio = (tab: StudioTab) => {
+    cancelCountdown(); creative.pause();
+    const source = getSource();
+    setLensPreviewSource(source ? snapshotFrame(source, mode === 'camera' ? ratio : null, mode === 'camera' && facing === 'user', 512) : null);
+    setStudioTab(tab); setMenuOpen(false); setCreativeOpen(true);
+  };
 
   return (
     <div className="app">
@@ -993,6 +1000,7 @@ export default function App() {
           {customs.find((c) => c.id === lutId)?.name ?? PRESETS.find((p) => p.id === lutId)?.label}
         </span>
         <div className="header-btns">
+          {creative.records[0] && <button className="recent-thumb" aria-label="최근 촬영 열기" disabled={busy || creative.working} onClick={() => { cancelCountdown(); creative.pause(); creative.setHistoryOpen(true); }}><BlobPhoto blob={creative.records[0].blob} alt="최근 촬영" /></button>}
           {mode === 'camera' && (
             <>
               <button
@@ -1029,7 +1037,7 @@ export default function App() {
             {menuOpen && (
               <div className="menu">
                 <button disabled={busy || creative.working} onClick={() => { cancelCountdown(); creative.pause(); setMenuOpen(false); creative.setHistoryOpen(true); }}>최근 촬영</button>
-                <button disabled={busy || creative.working} onClick={() => { cancelCountdown(); creative.pause(); const source = getSource(); setLensPreviewSource(source ? snapshotFrame(source, mode === 'camera' ? ratio : null, mode === 'camera' && facing === 'user', 512) : null); setMenuOpen(false); setCreativeOpen(true); }}>촬영 모드 · 효과</button>
+                <button disabled={busy || creative.working} onClick={() => openStudio('shooting')}>촬영 모드 · 효과</button>
                 <button disabled={busy || creative.working || creative.locked || pendingLut} onClick={() => { setMenuOpen(false); setRecipeOpen(true); }}>카메라 레시피</button>
                 {mode === 'camera' && (
                   <button
@@ -1292,7 +1300,10 @@ export default function App() {
           </svg>
           <span>필터</span>
         </button>
-        {creative.records[0] && <button className="recent-thumb" aria-label="최근 촬영 열기" disabled={busy || creative.working} onClick={() => { cancelCountdown(); creative.pause(); creative.setHistoryOpen(true); }}><BlobPhoto blob={creative.records[0].blob} alt="최근 촬영" /></button>}</div>
+        <button className={`dock-btn${creative.mode !== 'normal' || creativeOpen ? ' on' : ''}`} aria-label="스튜디오" disabled={busy || creative.working} onClick={() => openStudio('templates')}>
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M9 7h6M9 11h6M9 15h6" /></svg>
+          <span>스튜디오</span>
+        </button></div>
         {mode === 'camera' ? (
           <button
             className="shutter"
@@ -1454,7 +1465,36 @@ export default function App() {
         </div>
       )}
 
-      {creativeOpen && <CreativeSettings mode={creative.mode} options={creativeOptions} originals={keepOriginal} locked={creative.locked} gentleAvailable={gentleAvailable} ratioIdx={captureRatioIdx} ratioLocked={creative.frames.length > 0 || creative.working} onRatio={setCompositeRatioIdx} lensPreview={<LensComparison source={lensPreviewSource} params={params} lut={applied.lut} lutKey={applied.key} amount={applied.amount} fx={applied.fx} look={look} ready={renderReady} />} onMode={(next) => { if (mode === 'edit') { setReprocessRecord(null); setMode('camera'); } cancelCountdown(); creative.changeMode(next); }} onOptions={setCreativeOptions} onOriginals={setKeepOriginal} onClose={() => setCreativeOpen(false)} />}
+      {creativeOpen && <CreativeSettings
+        initialTab={studioTab}
+        mode={creative.mode}
+        composition={creative.options}
+        boothMethod={creative.boothMethod}
+        methodLocked={creative.frames.length > 0 || creative.working}
+        working={creative.working}
+        onBoothMethod={creative.changeBoothMethod}
+        onTemplate={(options) => {
+          if (!creative.changeMode('booth')) return;
+          if (mode === 'edit') { setReprocessRecord(null); setMode('camera'); }
+          creative.setOptions(options);
+        }}
+        options={creativeOptions}
+        originals={keepOriginal}
+        locked={creative.locked}
+        gentleAvailable={gentleAvailable}
+        ratioIdx={tiledMode ? captureRatioIdx : compositeRatioIdx}
+        ratioLocked={creative.frames.length > 0 || creative.working}
+        onRatio={setCompositeRatioIdx}
+        lensPreview={<LensComparison source={lensPreviewSource} params={params} lut={applied.lut} lutKey={applied.key} amount={applied.amount} fx={applied.fx} look={look} ready={renderReady} />}
+        onMode={(next) => {
+          if (!creative.changeMode(next)) return;
+          if (mode === 'edit') { setReprocessRecord(null); setMode('camera'); }
+          cancelCountdown();
+        }}
+        onOptions={setCreativeOptions}
+        onOriginals={setKeepOriginal}
+        onClose={() => setCreativeOpen(false)}
+      />}
       {recipeOpen && <RecipeSheet settings={generalSettings} onApply={applyCameraSettings} onClose={() => setRecipeOpen(false)} />}
       {creative.historyOpen && <PhotoHistory records={creative.records} warning={creative.warning} onClose={() => creative.setHistoryOpen(false)} onDelete={creative.remove} onReprocess={reprocessPhoto} />}
       {creative.review && <CaptureWorkspace capture={creative} />}

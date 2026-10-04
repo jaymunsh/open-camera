@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { useCreativeCapture } from '../capture/useCreativeCapture';
 import type { CapturedFrame } from '../capture/types';
 import { CameraDialog } from './CameraDialog';
+import { TemplateChooser } from './TemplateChooser';
 
 type Controller = ReturnType<typeof useCreativeCapture>;
 function FrameThumbnail({ frame, index, disabled, onRetake }: { frame: CapturedFrame; index: number; disabled: boolean; onRetake: () => void }) {
@@ -38,6 +39,8 @@ export function CaptureWorkspace({ capture }: { capture: Controller }) {
       <label className="camera-range">겹침 비율 {Math.round(capture.options.mix * 100)}%<input aria-label="겹침 비율" type="range" min={0} max={1} step={.01} value={capture.options.mix} onChange={(e) => capture.setOptions({ ...capture.options, mix: Number(e.target.value) })} /></label>
     </fieldset>}
     {capture.mode === 'booth' && <details className="capture-layout"><summary>배치 · 여백</summary>
+      <p className="camera-note">프레임만 바뀌고 촬영한 네 장은 그대로 유지됩니다.</p>
+      <TemplateChooser options={capture.options} ratio={{ w: capture.frames[0].canvas.width, h: capture.frames[0].canvas.height }} disabled={capture.working} onChoose={capture.setOptions} />
       <fieldset disabled={capture.working} className="camera-field"><legend>네 컷 배치</legend><div className="camera-choices">{([['grid', '2×2'], ['strip', '세로 스트립']] as const).map(([layout, label]) => <button key={layout} aria-pressed={capture.options.layout === layout} onClick={() => capture.setOptions({ ...capture.options, layout })}>{label}</button>)}</div></fieldset>
       <fieldset disabled={capture.working} className="camera-field"><legend>여백 색</legend><div className="camera-choices">{([['white', '흰 여백'], ['black', '검은 여백']] as const).map(([paper, label]) => <button key={paper} aria-pressed={capture.options.paper === paper} onClick={() => capture.setOptions({ ...capture.options, paper })}>{label}</button>)}</div></fieldset>
     </details>}

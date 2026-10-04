@@ -69,9 +69,11 @@ export function useCreativeCapture(captureFrame: () => Promise<CapturedFrame>, o
     setBoothMethod(next); setPaused(false);
   };
   const changeMode = (next: CaptureMode) => {
-    if (next === mode) return;
-    if (frames.length && !window.confirm('진행 중인 촬영을 버리고 모드를 바꿀까요?')) return;
+    if (working || lock.current) return false;
+    if (next === mode) return true;
+    if (frames.length && !window.confirm('진행 중인 촬영을 버리고 모드를 바꿀까요?')) return false;
     cancel(); setModeState(next); setOptions(DEFAULT_COMPOSITION);
+    return true;
   };
   const shoot = useCallback(async () => {
     if (lock.current || document.hidden || mode === 'normal' || review) return;

@@ -90,6 +90,21 @@ body,
 .camera-range { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; font-size: 13px; font-variant-numeric: tabular-nums; }
 .camera-range input { width: 100%; accent-color: var(--camera-accent); min-height: 32px; }
 .camera-dialog .camera-primary { width: 100%; background: var(--camera-accent); color: #100d20; font-weight: 650; margin-top: 16px; }
+.studio-dialog { display: flex; flex-direction: column; overflow: hidden; padding: 0; }
+.studio-dialog .camera-dialog-head { flex: none; margin: 0; padding: 16px 18px 12px; }
+.studio-tabs { display: flex; flex: none; gap: 4px; padding: 0 18px 12px; border-bottom: 1px solid var(--camera-control); }
+.studio-tabs button { flex: 1; min-width: 0; background: transparent; color: var(--camera-muted); font-size: 14px; }
+.studio-tabs button[aria-selected="true"] { background: var(--camera-control); color: #f2f2f2; box-shadow: inset 0 -2px var(--camera-accent); }
+.studio-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 6px 18px max(18px, env(safe-area-inset-bottom)); scrollbar-color: var(--camera-muted) var(--camera-panel); }
+.studio-body:focus-visible { outline: 2px solid var(--camera-accent); outline-offset: -2px; }
+.studio-intro { margin-top: 18px; font-size: 16px; font-weight: 600; line-height: 1.5; }
+.template-choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 10px; }
+.camera-dialog .template-choice { min-width: 0; padding: 8px 4px 10px; background: transparent; border-radius: 8px; }
+.camera-dialog .template-choice[aria-pressed="true"] { background: var(--camera-control); }
+.template-diagram { display: grid; place-items: center; height: 112px; padding: 8px; }
+.template-diagram svg { display: block; max-width: 100%; max-height: 100%; width: 100%; height: 100%; }
+.template-label { display: block; margin-top: 6px; font-size: 12px; line-height: 1.4; }
+@media (max-width: 360px) { .template-choices { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .camera-empty { color: var(--camera-muted); font-size: 14px; text-align: center; padding: 32px 12px; }
 .camera-field input:not([type="range"]):not([type="checkbox"]) { display: block; width: 100%; padding: 12px; margin-top: 8px; background: var(--camera-control); color: #f2f2f2; border: 0; border-radius: 8px; min-height: 44px; font: inherit; user-select: text; -webkit-user-select: text; }
 .camera-field input::placeholder { color: var(--camera-muted); }
@@ -847,7 +862,7 @@ button.on {
 }
 .dock-left { display: flex; align-items: center; gap: 4px; justify-self: start; min-width: 0; }
 .dock-left .dock-btn { min-width: 56px; }
-.recent-thumb { width: 44px; height: 44px; padding: 4px; background: none; flex: none; }
+.recent-thumb { width: var(--header-control-height); height: var(--header-control-height); padding: 2px; background: none; flex: none; }
 .recent-thumb img { width: 100%; height: 100%; object-fit: cover; border-radius: 4px; display: block; }
 .recent-thumb:focus-visible { outline: 2px solid var(--camera-accent); }
 @media (max-width: 360px) { .dock-left .dock-btn { min-width: 44px; padding-inline: 4px; } }

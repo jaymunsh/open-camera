@@ -34,6 +34,15 @@ iOS 카메라 경험을 목표로 한 설치형 PWA. WebGL2 싱글 패스 셰이
 | `src/components/` | FilterStrip/FilterSheet/AdjustPanel/BeautyPanel/CustomLutsModal/InstallHint/ResetChip + thumbs.ts |
 | `src/utils/` | `lutStore`(IndexedDB), `share`(Web Share→다운로드 폴백), `image`(EXIF 회전 디코딩) |
 
+## 스튜디오 / 합성 촬영
+
+- `useCreativeCapture`가 촬영 모드, 자동·수동, 완료 컷, 재촬영, 준비된 결과를 소유합니다. `changeMode`는 모드 변경 승인 여부를 반환해, 진행 중 촬영을 버리기를 거절하면 템플릿이나 편집 모드도 변경하지 않습니다.
+- 기존 `CreativeSettings` 대화상자를 스튜디오의 템플릿·촬영 모드·효과 탭으로 확장합니다. 제목·탭은 고정하고 내용만 스크롤하며, 방향키/Home/End로 탭을 선택할 수 있습니다. 하단 스튜디오 버튼이 주 진입점이고 기존 메뉴 바로가기는 유지합니다.
+- `capture/templates.ts`가 6종 프레임의 레이아웃·스타일을 정의합니다. `TemplateChooser`는 공유 `compositionLayout`으로 계산한 실제 비율의 도형을 표시합니다. 예시 도형은 촬영 완료 사진이 아닙니다.
+- `compositionLayout`과 `drawCompositionPaper`를 실시간 `CapturePreview`와 결과 합성에 공유합니다. `layout: row`는 가로 네 컷, 선택적 `frame: memory`는 하단 여백, `frame: film`은 양쪽 필름 구멍을 추가합니다. `frame`이 없는 예전 저장 데이터는 기존 기본 여백 크기를 그대로 사용하며 IndexedDB 스키마 변경은 없습니다.
+- 촬영 확인에서 `setOptions`로 프레임을 바꾸면 보유한 네 컷을 재합성합니다. 날짜는 완성본에 한 번만 더하며, `composition`을 함께 보관해 원본 재현상에도 같은 배치·여백을 유지합니다.
+- 상단 최근 사진은 기존 `BlobPhoto`를 재사용합니다. 필터·일반 촬영 비율과 별개인 합성용 비율, 중앙 셔터와 기존 카메라 프레임 계산은 유지합니다.
+
 ## 렌더 파이프라인
 
 ### FilterPipeline (`pipeline.ts`)

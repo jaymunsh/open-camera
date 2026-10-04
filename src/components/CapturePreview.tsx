@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, type MutableRefObject, type RefObject } from 'react';
-import { compositionLayout } from '../capture/composite';
+import { compositionLayout, drawCompositionPaper } from '../capture/composite';
 import type { CapturedFrame, CompositionOptions } from '../capture/types';
 
 export type PreviewDraw = ((source: HTMLCanvasElement) => void) | null;
@@ -24,7 +24,7 @@ export function CapturePreview({ mode, frames, options, nextIndex, countdown, gr
       const now = performance.now();
       if (now - last < 1000 / 30) return;
       last = now;
-      ctx.fillStyle = options.paper === 'black' ? '#000' : '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      drawCompositionPaper(ctx, layout, options);
       const sx = (source?.width ?? 0) / viewSize.w, sy = (source?.height ?? 0) / viewSize.h;
       layout.cells.forEach((r, i) => {
         if (i === nextIndex && source) ctx.drawImage(source, sourceRect.left * sx, sourceRect.top * sy, sourceRect.w * sx, sourceRect.h * sy, r.x, r.y, r.w, r.h);
