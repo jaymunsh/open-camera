@@ -12,6 +12,31 @@ async function choose(page: Page, mode: '네 컷' | '하프프레임', method = 
   await page.getByRole('button', { name: '격자 켜기', exact: true }).click();
 }
 
+// Catches fading the whole popup (including controls) or leaving an opaque panel.
+for (const mode of ['하프프레임', '네 컷'] as const) {
+  test(`${mode} preview lets the scene through without fading controls or saved photos`, async ({ page }) => {
+    await choose(page, mode);
+    const popup = page.locator('.capture-preview');
+    const alpha = await popup.evaluate(el => {
+      const channels = getComputedStyle(el).backgroundColor.match(/[\d.]+/g)!.map(Number);
+      return channels[3] ?? 1;
+    });
+    expect(alpha).toBeGreaterThanOrEqual(.6); expect(alpha).toBeLessThanOrEqual(.7);
+    const photo = page.locator('.capture-frame canvas');
+    const opacity = Number(await photo.evaluate(el => getComputedStyle(el).opacity));
+    expect(opacity).toBeGreaterThanOrEqual(.85); expect(opacity).toBeLessThan(1);
+    await expect(popup).toHaveCSS('opacity', '1');
+    await expect(page.getByRole('button', { name: '합성 미리보기 확대', exact: true })).toHaveCSS('opacity', '1');
+    await page.getByRole('button', { name: '합성 미리보기 접기', exact: true }).click();
+    await expect(page.getByRole('button', { name: '합성 미리보기 펼치기', exact: true })).toHaveCSS('opacity', '1');
+    for (let n = 1; n <= (mode === '하프프레임' ? 2 : 4); n++) await page.getByRole('button', { name: '촬영', exact: true }).click();
+    await expect(page.getByRole('button', { name: '공유 / 저장', exact: true })).toBeEnabled();
+    const result = page.locator('.capture-result');
+    await expect(result).toHaveCSS('opacity', '1');
+    expect(await result.evaluate((c: HTMLCanvasElement) => c.getContext('2d')!.getImageData(c.width / 4, c.height / 4, 1, 1).data[3])).toBe(255);
+  });
+}
+
 // Catches a full-screen composition still covering the main single-shot camera.
 for (const [width, height] of [[390, 844], [320, 740], [667, 320], [1440, 900]]) {
   test(`single-shot framing stays centered while popup fits above the shutter at ${width}x${height}`, async ({ page }) => {

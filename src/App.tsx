@@ -47,6 +47,7 @@ import { BlobPhoto, PhotoHistory } from './components/PhotoHistory';
 import { CaptureWorkspace } from './components/CaptureWorkspace';
 import { CapturePreview, type PreviewDraw, type PreviewSize } from './components/CapturePreview';
 import { LensComparison } from './components/LensComparison';
+import { CameraInfo } from './components/CameraInfo';
 
 type Mode = 'camera' | 'edit';
 type Panel = 'filters' | 'adjust' | 'beauty';
@@ -175,6 +176,7 @@ export default function App() {
     zoomCaps,
     zoom,
     setZoom,
+    inspectCamera,
     backCams,
     torchOk,
     torchOn,
@@ -1113,6 +1115,7 @@ export default function App() {
                 >
                   라이선스
                 </button>
+                {mode === 'camera' && <CameraInfo read={inspectCamera} ready={ready} zoom={zoom} />}
               </div>
             )}
           </div>

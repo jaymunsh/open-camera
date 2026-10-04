@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 export type Facing = 'user' | 'environment';
+export type CameraInfoSnapshot = {
+  requestedFacing: Facing; facing: string | null; width: number | null; height: number | null;
+  zoomRange: { min: number; max: number } | null; zoom: number | null;
+};
 
 export function useCamera(enabled = true) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -47,14 +51,15 @@ export function useCamera(enabled = true) {
           stream.getTracks().forEach((t) => t.stop());
           return;
         }
+        // loadeddata can mark the camera ready before play() resolves.
+        const track = stream.getVideoTracks()[0];
+        trackRef.current = track;
         const v = videoRef.current;
         if (v) {
           v.srcObject = stream;
           await v.play().catch(() => {});
         }
         if (cancelled) return;
-        const track = stream.getVideoTracks()[0];
-        trackRef.current = track;
         const caps = track.getCapabilities() as MediaTrackCapabilities & {
           zoom?: { min: number; max: number; step: number };
         };
@@ -137,13 +142,32 @@ export function useCamera(enabled = true) {
         await t.applyConstraints({
           advanced: [{ zoom: clamped } as MediaTrackConstraintSet],
         });
-        setZoomState(clamped);
+        // Optional constraints may succeed without being applied. Display readback,
+        // not the requested number, and ignore an old track after camera switching.
+        const actual = (t.getSettings() as { zoom?: number }).zoom;
+        if (trackRef.current === t && typeof actual === 'number' && Number.isFinite(actual)) setZoomState(actual);
       } catch {
         /* zoom not applicable */
       }
     },
     [zoomCaps],
   );
+
+  const inspectCamera = useCallback((): CameraInfoSnapshot | null => {
+    const track = trackRef.current;
+    if (!track || track.readyState !== 'live') return null;
+    try {
+      const settings = track.getSettings() as MediaTrackSettings & { zoom?: number };
+      const caps = track.getCapabilities() as MediaTrackCapabilities & { zoom?: { min?: number; max?: number } };
+      const number = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? value : null;
+      const min = number(caps.zoom?.min), max = number(caps.zoom?.max);
+      return {
+        requestedFacing: facing, facing: settings.facingMode ?? null,
+        width: number(settings.width), height: number(settings.height), zoom: number(settings.zoom),
+        zoomRange: min !== null && max !== null && min > 0 && max >= min ? { min, max } : null,
+      };
+    } catch { return null; }
+  }, [facing]);
 
   const setTorch = useCallback(async (on: boolean) => {
     const t = trackRef.current;
@@ -158,5 +182,5 @@ export function useCamera(enabled = true) {
     }
   }, [torchOk]);
 
-  return { videoRef, facing, ready, error, flip, onLoaded, size, zoomCaps, zoom, setZoom, backCams, torchOk, torchOn, setTorch };
+  return { videoRef, facing, ready, error, flip, onLoaded, size, zoomCaps, zoom, setZoom, inspectCamera, backCams, torchOk, torchOn, setTorch };
 }
