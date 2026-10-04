@@ -18,16 +18,21 @@ export function snapshotFrame(source: TexImageSource, ratio: { w: number; h: num
   ctx.drawImage(source as CanvasImageSource, (w - sw) / 2, (h - sh) / 2, sw, sh, 0, 0, c.width, c.height);
   return c;
 }
-export function composeFrames(frames: HTMLCanvasElement[], mode: Exclude<CaptureMode, 'normal'>, options: Partial<CompositionOptions>): HTMLCanvasElement {
+export function compositionLayout(fw: number, fh: number, mode: Exclude<CaptureMode, 'normal'>, options: Partial<CompositionOptions>, maxEdge = 2048) {
   const expected = mode === 'booth' ? 4 : 2;
-  if (frames.length !== expected) throw new Error(`${expected}장의 사진이 필요합니다`);
-  const fw = Math.min(...frames.map((c) => c.width)), fh = Math.min(...frames.map((c) => c.height));
   const cols = mode === 'half' ? 2 : mode === 'booth' && options.layout !== 'strip' ? 2 : 1;
   const rows = mode === 'double' ? 1 : expected / cols;
   const gap = mode === 'booth' ? Math.max(1, Math.round(fw * .04)) : 0;
   const fullW = fw * cols + gap * (cols + 1), fullH = fh * rows + gap * (rows + 1);
-  const scale = Math.min(1, 2048 / Math.max(fullW, fullH));
-  const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(fullW * scale)); c.height = Math.max(1, Math.round(fullH * scale));
+  const scale = Math.min(1, maxEdge / Math.max(fullW, fullH));
+  return { width: Math.max(1, Math.round(fullW * scale)), height: Math.max(1, Math.round(fullH * scale)), cells: Array.from({ length: expected }, (_, i) => ({ x: (gap + (i % cols) * (fw + gap)) * scale, y: (gap + Math.floor(i / cols) * (fh + gap)) * scale, w: fw * scale, h: fh * scale })) };
+}
+export function composeFrames(frames: HTMLCanvasElement[], mode: Exclude<CaptureMode, 'normal'>, options: Partial<CompositionOptions>): HTMLCanvasElement {
+  const expected = mode === 'booth' ? 4 : 2;
+  if (frames.length !== expected) throw new Error(`${expected}장의 사진이 필요합니다`);
+  const fw = Math.min(...frames.map((c) => c.width)), fh = Math.min(...frames.map((c) => c.height));
+  const layout = compositionLayout(fw, fh, mode, options);
+  const c = document.createElement('canvas'); c.width = layout.width; c.height = layout.height;
   const ctx = c.getContext('2d')!;
   if (mode === 'double') {
     ctx.drawImage(frames[0], 0, 0, c.width, c.height);
@@ -46,7 +51,7 @@ export function composeFrames(frames: HTMLCanvasElement[], mode: Exclude<Capture
     ctx.putImageData(a, 0, 0);
   } else {
     ctx.fillStyle = options.paper === 'black' ? '#000' : '#fff'; ctx.fillRect(0, 0, c.width, c.height);
-    frames.forEach((f, i) => ctx.drawImage(f, (gap + (i % cols) * (fw + gap)) * scale, (gap + Math.floor(i / cols) * (fh + gap)) * scale, fw * scale, fh * scale));
+    frames.forEach((f, i) => { const r = layout.cells[i]; ctx.drawImage(f, r.x, r.y, r.w, r.h); });
   }
   return c;
 }

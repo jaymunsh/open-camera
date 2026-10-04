@@ -62,7 +62,7 @@ export function useCreativeCapture(captureFrame: () => Promise<CapturedFrame>, o
     setRecords((rows) => rows.filter((r) => r.id !== record.id));
   };
   const cancel = useCallback(() => { generation.current++; remembered.current = null; setFrames([]); setReview(false); setPrepared(null); setPreview(null); setFailure(null); setRetakeIndex(null); setPaused(false); setCountdown(null); }, []);
-  const pause = () => { if (mode === 'booth') { setPaused(true); setCountdown(null); } };
+  const pause = () => { if (mode === 'booth' && frames.length > 0) { setPaused(true); setCountdown(null); } };
   const changeMode = (next: CaptureMode) => {
     if (next === mode) return;
     if (frames.length && !window.confirm('진행 중인 촬영을 버리고 모드를 바꿀까요?')) return;

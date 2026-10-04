@@ -43,6 +43,13 @@ body,
 .capture-progress { position: absolute; left: 12px; right: 12px; top: 12px; display: flex; align-items: center; gap: 8px; width: fit-content; max-width: calc(100% - 24px); padding: 6px 8px 6px 12px; background: #151515; border-radius: 10px; font-size: 13px; z-index: 9; }
 .capture-progress span { font-variant-numeric: tabular-nums; }
 .capture-progress button { min-height: 38px; }
+.capture-mini { position: absolute; padding: 6px; border-radius: 8px; background: rgba(0,0,0,.8); pointer-events: none; }
+.viewer .capture-mini canvas { width: 100%; height: auto; display: block; }
+.lens-comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 16px; }
+.lens-comparison[hidden] { display: none; }
+.lens-comparison figure { margin: 0; min-width: 0; }
+.lens-comparison canvas { display: block; width: 100%; height: auto; max-height: 220px; object-fit: contain; background: #000; }
+.lens-comparison figcaption { font-size: 12px; color: var(--camera-muted); margin-top: 6px; }
 .camera-dialog-back { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.7); display: flex; align-items: flex-end; justify-content: center; padding: max(12px, env(safe-area-inset-top)) max(0px, env(safe-area-inset-right)) 0 max(0px, env(safe-area-inset-left)); }
 .camera-dialog { background: var(--camera-panel); border-radius: 18px 18px 0 0; padding: 18px 18px max(18px, env(safe-area-inset-bottom)); width: 100%; max-width: 540px; max-height: 100%; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: #777 var(--camera-panel); }
 .camera-dialog-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 20px; }
@@ -781,7 +788,7 @@ button.on {
 
 .dock {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   padding: 6px 20px 10px;
   flex: none;
@@ -803,6 +810,12 @@ button.on {
   gap: 6px;
   justify-self: end;
 }
+.dock-left { display: flex; align-items: center; gap: 4px; justify-self: start; min-width: 0; }
+.dock-left .dock-btn { min-width: 56px; }
+.recent-thumb { width: 44px; height: 44px; padding: 4px; background: none; flex: none; }
+.recent-thumb img { width: 100%; height: 100%; object-fit: cover; border-radius: 4px; display: block; }
+.recent-thumb:focus-visible { outline: 2px solid var(--camera-accent); }
+@media (max-width: 360px) { .dock-left .dock-btn { min-width: 44px; padding-inline: 4px; } }
 
 .dock-group .dock-btn {
   min-width: 48px;
