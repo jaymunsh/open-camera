@@ -17,18 +17,23 @@ for (const c of [
   { mode: '하프프레임', ratio: '4:5', width: 844, height: 390, aspect: 1.6, cells: 2 },
   { mode: '하프프레임', ratio: '1:1', width: 1440, height: 900, aspect: 2, cells: 2 },
 ]) {
-  test(`${c.mode} is a centered full composition rather than a tiny thumbnail at ${c.width}x${c.height}`, async ({ page }) => {
+  test(`${c.mode} keeps its main shot centered with a separate composition at ${c.width}x${c.height}`, async ({ page }) => {
     await page.setViewportSize({ width: c.width, height: c.height });
+    await page.addInitScript(() => localStorage.setItem('oc-grid', '1'));
     await page.goto('http://127.0.0.1:5186/'); await choose(page, c.mode, c.ratio);
     const viewer = (await page.locator('.viewer').boundingBox())!;
     const composition = page.locator('.viewer [role=img] canvas');
-    const box = (await composition.boundingBox())!;
-    const expectedWidth = Math.min(viewer.width, viewer.height * c.aspect);
-    const expectedHeight = expectedWidth / c.aspect;
+    const box = (await page.locator('.viewer > .grid-overlay').boundingBox())!;
+    const shotAspect = c.ratio === '1:1' ? 1 : c.ratio === '4:5' ? .8 : .75;
+    const expectedWidth = Math.min(viewer.width, viewer.height * shotAspect);
+    const expectedHeight = expectedWidth / shotAspect;
     expect(Math.abs(box.width - expectedWidth)).toBeLessThan(2);
     expect(Math.abs(box.height - expectedHeight)).toBeLessThan(2);
     expect(Math.abs(box.x + box.width / 2 - (viewer.x + viewer.width / 2))).toBeLessThan(1);
     expect(Math.abs(box.y + box.height / 2 - (viewer.y + viewer.height / 2))).toBeLessThan(1);
+    const mini = (await composition.boundingBox())!;
+    expect(mini.width / mini.height).toBeCloseTo(c.aspect, 2);
+    expect(mini.width).toBeLessThan(200);
     await expect(page.locator('.capture-cell')).toHaveCount(c.cells);
     await expect(page.locator('.capture-cell.current')).toContainText('현재 컷');
     await expect(page.locator('.capture-cell.pending')).toHaveCount(c.cells - 1);
@@ -44,7 +49,7 @@ for (const c of [
   });
 }
 
-test('booth shows completed, live and waiting cells with countdown inside the live cell', async ({ page }) => {
+test('booth shows completed, live and waiting cells with a large countdown on the main camera', async ({ page }) => {
   await page.goto('/'); await choose(page, '네 컷', '1:1');
   await page.getByRole('button', { name: '촬영', exact: true }).click();
   await expect(page.locator('.capture-cell.complete')).toHaveCount(1);
@@ -53,7 +58,8 @@ test('booth shows completed, live and waiting cells with countdown inside the li
   await expect(page.locator('.capture-cell.pending')).toHaveCount(2);
   await expect(current.locator('.cell-countdown')).toBeVisible();
   const cell = (await current.boundingBox())!, number = (await current.locator('.cell-countdown').boundingBox())!;
-  expect(number.width).toBeGreaterThanOrEqual(44);
+  const mainCount = (await page.locator('.capture-countdown').boundingBox())!;
+  expect(mainCount.width).toBeGreaterThanOrEqual(44);
   expect(number.x).toBeGreaterThanOrEqual(cell.x); expect(number.y).toBeGreaterThanOrEqual(cell.y);
   expect(number.x + number.width).toBeLessThanOrEqual(cell.x + cell.width);
   expect(number.y + number.height).toBeLessThanOrEqual(cell.y + cell.height);

@@ -77,11 +77,12 @@ for (const [width, height] of [[390, 844], [1440, 900], [320, 740], [844, 390], 
     await page.setViewportSize({ width, height }); await page.goto('http://127.0.0.1:5186/');
     const download = page.waitForEvent('download'); await page.getByRole('button', { name: '촬영', exact: true }).click(); await download;
     await choose(page, '하프프레임', '1:1'); await page.getByRole('button', { name: '촬영', exact: true }).click();
-await expect(page.locator('.capture-preview')).toHaveAccessibleName(/2번째 촬영/);
-const viewer = (await page.locator('.viewer').boundingBox())!, mini = (await page.locator('.capture-frame').boundingBox())!;
+    await expect(page.locator('.capture-preview')).toHaveAccessibleName(/2번째 촬영/);
+    const viewer = (await page.locator('.viewer').boundingBox())!, mini = (await page.locator('.capture-frame').boundingBox())!;
     expect(mini.x).toBeGreaterThanOrEqual(viewer.x); expect(mini.y).toBeGreaterThanOrEqual(viewer.y);
     expect(mini.x + mini.width).toBeLessThanOrEqual(viewer.x + viewer.width);
-    expect(mini.y + mini.height).toBeLessThanOrEqual(viewer.y + viewer.height);
+    const dock = (await page.locator('.dock').boundingBox())!;
+    expect(mini.y + mini.height).toBeLessThanOrEqual(dock.y);
     const shutter = (await page.getByRole('button', { name: '촬영', exact: true }).boundingBox())!;
     expect(Math.abs(shutter.x + shutter.width / 2 - width / 2)).toBeLessThan(1);
     const thumb = (await page.getByRole('button', { name: '최근 촬영 열기', exact: true }).boundingBox())!;
