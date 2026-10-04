@@ -545,6 +545,7 @@ void main() {
       float edge = 1.0 - smoothstep(0.0, .2, min(v_uv.x, 1.0-v_uv.x));
       float direction = v_uv.x < .5 ? 1.0 : -1.0;
       vec2 off = vec2(direction * .045, .015) * u_uvScale;
+      off.x *= mix(1.0, -1.0, u_mirror);
       vec3 ghost = vec3(texture(u_src, uv+off*1.15).r, texture(u_src, uv+off).g, texture(u_src, uv+off*.85).b);
       c = mix(c, ghost, edge * u_creativeLensAmount * .5);
     }

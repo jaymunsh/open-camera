@@ -274,6 +274,114 @@ test('retrying a canceled composition share keeps one history record', async ({ 
   await expect(page.locator('.history-photo')).toHaveCount(1);
 });
 
+test('history detail refreshes pending originals and deletes the persisted photo', async ({ page }) => {
+  await page.goto('/'); await menu(page, '촬영 모드 · 효과');
+  await page.getByLabel('원본도 보관').check(); await page.getByRole('button', { name: '닫기', exact: true }).click();
+  await page.evaluate(() => {
+    const original = HTMLCanvasElement.prototype.toBlob; let calls = 0;
+    HTMLCanvasElement.prototype.toBlob = function (callback, ...args) {
+      if (++calls === 2) (window as any).finishOriginal = () => new Promise<void>((resolve) => original.call(this, (blob) => { callback(blob); resolve(); }, ...args));
+      else original.call(this, callback, ...args);
+    };
+  });
+  const download = page.waitForEvent('download'); await page.getByRole('button', { name: '촬영', exact: true }).click(); await download;
+  await menu(page, '최근 촬영'); await page.locator('.history-photo').click();
+  await page.evaluate(() => (window as any).finishOriginal());
+  await expect.poll(() => page.evaluate(async () => { const path = '/src/capture/store.ts'; const m: any = await import(/* @vite-ignore */ path); return (await m.listCaptures()).length; })).toBe(1);
+  await expect(page.getByRole('button', { name: '다시 현상', exact: true })).toBeVisible();
+  page.once('dialog', (dialog) => dialog.accept()); await page.getByRole('button', { name: '삭제', exact: true }).click();
+  await expect(page.getByText('아직 촬영한 사진이 없습니다.')).toBeVisible();
+  await page.reload(); await menu(page, '최근 촬영'); await expect(page.locator('.history-photo')).toHaveCount(0);
+});
+
+test('export pipeline updates a LUT when data changes under the same key', async ({ page }) => {
+  await page.goto('/');
+  const pixel = await page.evaluate(async () => {
+    const path = '/src/engine/pipeline.ts'; const m: any = await import(/* @vite-ignore */ path);
+    const types = '/src/engine/types.ts'; const t: any = await import(/* @vite-ignore */ types);
+    const source = document.createElement('canvas'); source.width = source.height = 8;
+    const ctx = source.getContext('2d')!; ctx.fillStyle = '#777'; ctx.fillRect(0, 0, 8, 8);
+    const data = new Uint8Array(24); for (let i = 0; i < 8; i++) data[i * 3] = 255;
+    await m.renderFilteredCanvas(source, t.DEFAULT_PARAMS, 'same-key', null, 1);
+    const result: HTMLCanvasElement = await m.renderFilteredCanvas(source, t.DEFAULT_PARAMS, 'same-key', { size: 2, data }, 1);
+    return Array.from(result.getContext('2d')!.getImageData(4, 4, 1, 1).data).slice(0, 3);
+  });
+  expect(pixel[0]).toBeGreaterThan(240); expect(pixel[1]).toBeLessThan(10); expect(pixel[2]).toBeLessThan(10);
+});
+
+test('session fallback keeps shareable photos when durable storage fails', async ({ page }) => {
+  await page.goto('/'); await page.evaluate(() => {
+    Object.defineProperty(navigator, 'canShare', { configurable: true, value: () => true });
+    Object.defineProperty(navigator, 'share', { configurable: true, value: async () => { throw new DOMException('cancel', 'AbortError'); } });
+    const encode = HTMLCanvasElement.prototype.toBlob;
+    HTMLCanvasElement.prototype.toBlob = function (callback, ...args) { encode.call(this, (blob) => callback(new Blob([blob!, new Uint8Array(26 * 1024 * 1024)], { type: 'image/jpeg' })), ...args); };
+    const put = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (...args) { if (this.name === 'captures') throw new DOMException('full', 'QuotaExceededError'); return put.apply(this, args); };
+  });
+  for (let i = 0; i < 2; i++) {
+    await page.getByRole('button', { name: '촬영', exact: true }).click(); await menu(page, '최근 촬영');
+    await expect(page.getByRole('status')).toContainText('기기에 보관하지 못');
+    if (i === 0) await page.getByRole('button', { name: '닫기', exact: true }).click();
+  }
+  await expect(page.locator('.history-photo')).toHaveCount(2);
+});
+
+test('reprocessing during a paused booth asks before discarding captured frames', async ({ page }) => {
+  await page.goto('/'); await menu(page, '촬영 모드 · 효과'); await page.getByLabel('원본도 보관').check();
+  await page.getByRole('button', { name: '닫기', exact: true }).click();
+  const download = page.waitForEvent('download'); await page.getByRole('button', { name: '촬영', exact: true }).click(); await download;
+  await menu(page, '촬영 모드 · 효과'); await page.getByRole('button', { name: '네 컷', exact: true }).click();
+  await page.getByRole('button', { name: '닫기', exact: true }).click();
+  await page.getByRole('button', { name: '촬영', exact: true }).click(); await expect(page.locator('.capture-progress')).toContainText('2/4');
+  await menu(page, '최근 촬영'); await page.locator('.history-photo').click();
+  let asked = false; page.once('dialog', async (dialog) => { asked = true; await dialog.dismiss(); });
+  await page.getByRole('button', { name: '다시 현상', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: '최근 촬영' })).toBeVisible(); expect(asked).toBe(true);
+  await page.getByRole('button', { name: '닫기', exact: true }).click(); await expect(page.locator('.capture-progress')).toContainText('2/4');
+  await menu(page, '최근 촬영'); await page.locator('.history-photo').click();
+  page.once('dialog', (dialog) => dialog.accept()); await page.getByRole('button', { name: '다시 현상', exact: true }).click();
+  await expect(page.getByRole('button', { name: '저장', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: '조절', exact: true })).toBeEnabled();
+  expect(await page.locator('.camera-controls').evaluate((controls: HTMLElement) => controls.inert)).toBe(false);
+});
+
+test('prism is consistent between mirrored cropped capture and retained original', async ({ page }) => {
+  await page.goto('/');
+  const delta = await page.evaluate(async () => {
+    const path = '/src/engine/pipeline.ts'; const m: any = await import(/* @vite-ignore */ path);
+    const types = '/src/engine/types.ts'; const t: any = await import(/* @vite-ignore */ types);
+    const composite = '/src/capture/composite.ts'; const c: any = await import(/* @vite-ignore */ composite);
+    const source = document.createElement('canvas'); source.width = source.height = 256;
+    const ctx = source.getContext('2d')!;
+    for (let x = 0; x < 256; x += 8) { ctx.fillStyle = ['#f00', '#0f0', '#00f'][Math.floor(x / 8) % 3]; ctx.fillRect(x, 0, 8, 256); }
+    const ratio = { w: 3, h: 4 }; const original = c.snapshotFrame(source, ratio, true);
+    const render = (input: HTMLCanvasElement, mirror: boolean, lens: string) => m.renderFilteredCanvas(input, t.DEFAULT_PARAMS, null, null, 0, mirror, mirror ? ratio : null, null, null, undefined, null, [], undefined, { lens, lensAmount: 1, gentle: false });
+    const diff = (a: HTMLCanvasElement, b: HTMLCanvasElement) => { const ad = a.getContext('2d')!.getImageData(0, 0, a.width, a.height).data; const bd = b.getContext('2d')!.getImageData(0, 0, b.width, b.height).data; let max = 0; for (let i = 0; i < ad.length; i++) max = Math.max(max, Math.abs(ad[i] - bd[i])); return max; };
+    return { plain: diff(await render(source, true, 'none'), await render(original, false, 'none')), prism: diff(await render(source, true, 'prism'), await render(original, false, 'prism')) };
+  });
+  expect(delta.prism).toBeLessThanOrEqual(delta.plain + 8);
+});
+
+test('composite reprocessing never pairs a new filter ID with stale LUT data', async ({ page }) => {
+  await page.goto('/'); await page.locator('.strip-item').filter({ hasText: /^WARM$/ }).click();
+  await menu(page, '촬영 모드 · 효과'); await page.getByLabel('원본도 보관').check();
+  await page.getByRole('button', { name: '하프프레임', exact: true }).click(); await page.getByRole('button', { name: '닫기', exact: true }).click();
+  await page.getByRole('button', { name: '촬영', exact: true }).click(); await expect(page.locator('.capture-progress')).toContainText('2/2');
+  await page.getByRole('button', { name: '촬영', exact: true }).click();
+  const download = page.waitForEvent('download'); await page.getByRole('button', { name: '공유 / 저장', exact: true }).click(); await download;
+  await menu(page, '촬영 모드 · 효과'); await page.getByRole('button', { name: '일반', exact: true }).click(); await page.getByRole('button', { name: '닫기', exact: true }).click();
+  await page.locator('.strip-item').filter({ hasText: /^ORIGINAL$/ }).click();
+  const second = page.waitForEvent('download'); await page.getByRole('button', { name: '촬영', exact: true }).click(); await second;
+  await menu(page, '최근 촬영'); await page.locator('.history-photo').filter({ hasText: '하프프레임' }).click();
+  await page.evaluate(async () => {
+    const path = '/src/engine/pipeline.ts'; const m: any = await import(/* @vite-ignore */ path);
+    const set = m.FilterPipeline.prototype.setLUT; (window as any).badLutPairs = 0;
+    m.FilterPipeline.prototype.setLUT = function (key: string, lut: unknown) { if (key === 'preset-warm' && !lut) (window as any).badLutPairs++; return set.call(this, key, lut); };
+  });
+  await page.getByRole('button', { name: '다시 현상', exact: true }).click(); await expect(page.locator('.filter-name')).toHaveText('WARM');
+  await page.waitForTimeout(500); expect(await page.evaluate(() => (window as any).badLutPairs)).toBe(0);
+});
+
 test('corrupt recipe storage cannot be silently overwritten', async ({ page }) => {
   await page.goto('/'); await page.evaluate(() => localStorage.setItem('oc-recipes', 'broken-data'));
   await menu(page, '카메라 레시피'); await page.getByLabel('레시피 이름').fill('새 레시피');

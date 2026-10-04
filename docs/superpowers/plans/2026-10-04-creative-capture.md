@@ -10,7 +10,7 @@
 ## Global Constraints
 
 - Default normal capture, existing LUTs, amber date, iOS header and centered preview remain unchanged.
-- Recent history: 10 result bundles, all Blob bytes at most 50 MiB, separate `oc-captures` database.
+- Recent history: 10 result bundles, durable Blob bytes at most 50 MiB, separate `oc-captures` database. Over-limit/failing bundles remain available temporarily as required by the spec.
 - Original retention defaults off; originals are processed camera frames, not RAW.
 - Composite output long edge at most 2048px, no upscaling; half-frame uses two 3:4 frames.
 - Four-shot booth uses 3-second gaps, pauses when hidden, offers 2×2/strip and white/black margins.
@@ -71,8 +71,8 @@
 
 **Files:** Tests above plus any files implicated by independently found bugs.
 - [x] Capture real built mobile/desktop screens of settings, history and completed composite; inspect in one batch without redesigning the incumbent UI. One confirmation round corrected capture timing only.
-- [ ] Run fresh whole-branch review, fix important findings with reproducing tests, and rerun full suite/build.
-- [ ] Record what is verified versus requiring physical iOS testing. Hand off completed local implementation without claiming deployment.
+- [x] Run fresh whole-branch review, fix important findings with reproducing tests, and rerun full suite/build.
+- [x] Record what is verified versus requiring physical iOS testing. Hand off completed local implementation without claiming deployment.
 
 ## Verification record
 
@@ -85,3 +85,23 @@
 - Physical iPhone/iOS camera, Safari share behavior and real-device lens performance remain release checks. Browser tests use Chromium's fake camera / SwiftShader, not a physical device.
 - Composite reprocessing deliberately does not apply beauty/face analysis; the editor labels this. Original retention is cropped camera JPEG data, not RAW.
 - Implementation stayed in the existing checkout on `feat/creative-capture`; no extra worktree, push or deployment.
+- Fresh whole-branch review: gpt-6-astra inspected all 2,262 diff lines, six screenshots, and targeted live browser cases. Four Important findings, no Critical/Minor findings.
+- Final fix pass: refreshed history detail by ID and made deletion reliable across pending writes; guarded coherent settings/LUT inputs and canceled stale multi-frame jobs; included actual LUT identity in texture caching; guarded edit entry during unfinished captures; transformed prism offset for mirrored source coordinates.
+- Five review regressions reproduced RED before source fixes. Targeted GREEN: six tests passed, including storage-failure fallback. Final full suite: **60/60 passed (3.0m)**; typecheck and production build passed. Existing presets and public LUT assets have zero diff from the base.
+- Screenshot output was temporarily stabilized for the reviewer, then restored to the standard ignored `test-results` directory. No new generated assets or dependencies are committed.
+
+## Decisions and remaining release checks
+
+These are the implementation rulings, in chronological order; no minor findings were deferred.
+
+1. Follow the user's instruction to start without another approval handoff. Cost if wrong: revise optional defaults; production was untouched.
+2. Use a feature branch in the existing checkout, not another worktree. Cost if wrong: switch branches to see the old source; main/production remained untouched.
+3. Keep original shot time separately from new history creation time. Cost if wrong: one additional local metadata field.
+4. Composite reprocessing omits beauty and labels this; normal reprocessing can use it. Cost if wrong: a future per-frame face-analysis feature is needed.
+5. Use one integrated feature commit rather than committing future UI tests while RED. Cost if wrong: a larger initial diff; final corrections have a separate commit.
+6. Physical iOS background/camera restart/native share/storage eviction/GPU/memory were outside browser validation. Cost if wrong: device-only failures remain possible; these are explicit release checks, not success claims.
+7. Exact baseline pixel equivalence and every red-date orientation/size were not exhaustively compared. Cost if wrong: a rare rendering/bounds difference; existing regression coverage and unchanged default branches remain.
+8. Portrait/outdoor/night aesthetic quality was not established by synthetic camera screenshots. Cost if wrong: optional look/lens tuning after real photo feedback.
+9. Session fallback may exceed 50 MiB, because oversized bundles must remain available in-session. Durable storage is byte-bounded and the session is max10. Cost if wrong: increased temporary memory. An exploratory session-byte-limit assertion was rejected as conflicting with the approved spec; no source change was made for it.
+10. Review accepted the earlier labeled composite-beauty omission. Cost if wrong: future composite face-analysis work.
+11. The UI inspection was a narrow layout/focus assessment, not broad accessibility certification or redesign. Cost if wrong: assistive-technology testing can still find issues.

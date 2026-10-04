@@ -10,7 +10,8 @@ export function BlobPhoto({ blob, className, alt }: { blob: Blob; className?: st
 }
 const labels = { normal: '일반', half: '하프프레임', booth: '네 컷', double: '다중노출' };
 export function PhotoHistory({ records, warning, onClose, onDelete, onReprocess }: { records: CaptureRecord[]; warning: string | null; onClose: () => void; onDelete: (r: CaptureRecord) => Promise<void>; onReprocess: (r: CaptureRecord) => Promise<void> }) {
-  const [selected, setSelected] = useState<CaptureRecord | null>(null);
+  const [selectedId, setSelected] = useState<string | null>(null);
+  const selected = records.find((record) => record.id === selectedId) ?? null;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const run = async (action: () => Promise<unknown>) => { setBusy(true); setError(null); try { await action(); } catch (e) { setError(e instanceof Error ? e.message : '작업에 실패했습니다. 다시 시도해주세요.'); } finally { setBusy(false); } };
@@ -27,7 +28,7 @@ export function PhotoHistory({ records, warning, onClose, onDelete, onReprocess 
         {selected.originals.length > 0 && <button disabled={busy} onClick={() => void run(() => onReprocess(selected))}>다시 현상</button>}
         <button disabled={busy} onClick={() => { if (window.confirm('이 사진과 보관한 원본을 삭제할까요?')) void run(async () => { await onDelete(selected); setSelected(null); }); }}>삭제</button>
       </div>
-    </> : records.length ? <div className="history-grid">{records.map((r) => <button className="history-photo" key={r.id} onClick={() => setSelected(r)} aria-label={`${labels[r.mode]} ${new Date(r.createdAt).toLocaleString('ko-KR')} 보기`}>
+    </> : records.length ? <div className="history-grid">{records.map((r) => <button className="history-photo" key={r.id} onClick={() => setSelected(r.id)} aria-label={`${labels[r.mode]} ${new Date(r.createdAt).toLocaleString('ko-KR')} 보기`}>
       <BlobPhoto blob={r.blob} alt={`${labels[r.mode]} 촬영 사진`} /><span>{labels[r.mode]}{r.persisted === false ? ' · 임시' : ''}</span>
     </button>)}</div> : <p className="camera-empty">아직 촬영한 사진이 없습니다.</p>}
   </CameraDialog>;

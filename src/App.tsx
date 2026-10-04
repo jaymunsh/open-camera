@@ -446,6 +446,7 @@ export default function App() {
   }, [lutId, lutReady, loadedLuts, lutIntensity, grainOff, creativeOptions.strengthMode, look.gentle]);
 
   const showDate = dateMode === 'on' || (dateMode === 'auto' && !!applied.fx?.date);
+  const renderReady = lutReady && applied.key === `preset-${lutId}` && applied.lut === (lutId === 'none' ? null : loadedLuts[lutId]) && applied.amount === (lutId === 'none' ? 0 : lutIntensity);
 
   const paramsRef = useRef(params);
   paramsRef.current = params;
@@ -579,14 +580,16 @@ export default function App() {
     if (mode !== 'edit' || !editSrc) return;
     const p = getPipe();
     if (!p) return;
+    if (!compare && !renderReady) return;
     if (reprocessRecord && reprocessRecord.mode !== 'normal' && !compare) {
       let live = true;
-      void renderReprocessed(reprocessRecord, { ...generalSettings, gentle: look.gentle }, applied.lut, applied.fx, false).then((source) => {
+      const abort = new AbortController();
+      void renderReprocessed(reprocessRecord, { ...generalSettings, gentle: look.gentle }, applied.lut, applied.fx, false, abort.signal).then((source) => {
         if (!live) return;
         p.setBeautyMask(null, DEFAULT_BEAUTY); p.setWarpMap(null); maskDirty.current = true; warpDirty.current = true;
         p.setSource(source); p.setLUT(null, null); p.render(DEFAULT_PARAMS, 0, { fit: 'contain', fx: null });
       }).catch((e) => { if (live) setGlError((e as Error).message); });
-      return () => { live = false; };
+      return () => { live = false; abort.abort(); };
     }
     applyBeauty(p, compare);
     p.setSource(editSrc);
@@ -597,7 +600,7 @@ export default function App() {
       look: compare ? undefined : look,
       eyes: !compare && (applied.fx?.redeye ?? 0) > 0.001 ? eyePoints(getSmoothedFaces()) : undefined,
     });
-  }, [mode, editSrc, params, applied, compare, getPipe, sizeTick, beauty, beautyTick, creativeOptions, look.gentle, reprocessRecord]);
+  }, [mode, editSrc, params, applied, compare, getPipe, sizeTick, beauty, beautyTick, creativeOptions, look.gentle, reprocessRecord, renderReady]);
 
   const getSource = useCallback((): TexImageSource | null => {
     if (mode === 'camera') {
@@ -607,11 +610,12 @@ export default function App() {
     return editSrc;
   }, [mode, editSrc, videoRef]);
 
+  const confirmEditEntry = useCallback(() => !creative.frames.length || window.confirm('진행 중인 촬영을 버리고 사진 편집을 시작할까요?'), [creative.frames.length]);
   const openImage = useCallback(async (f: File) => {
     try {
-      if (creative.frames.length && !window.confirm('진행 중인 촬영을 버리고 사진을 불러올까요?')) return;
-      creative.cancel();
+      if (!confirmEditEntry()) return;
       const src = await loadImageFile(f);
+      creative.cancel();
       setReprocessRecord(null);
       setEditSrc(src);
       setEditToken((t) => t + 1);
@@ -619,7 +623,7 @@ export default function App() {
     } catch {
       setGlError('이미지를 불러올 수 없습니다');
     }
-  }, [creative.frames.length, creative.cancel]);
+  }, [confirmEditEntry, creative.cancel]);
 
   const applyCameraSettings = async (value: CameraSettings) => {
     const s = validateSettings(value);
@@ -635,6 +639,7 @@ export default function App() {
   };
 
   const reprocessPhoto = async (record: CaptureRecord) => {
+    if (!confirmEditEntry()) return;
     if (!record.originals.length) throw new Error('이 사진에는 보관한 원본이 없습니다');
     const sources: HTMLCanvasElement[] = [];
     for (const blob of record.originals) {
@@ -647,6 +652,7 @@ export default function App() {
       try { await applyCameraSettings({ ...record.settings, beauty: { ...DEFAULT_BEAUTY } }); }
       catch { setLutId('none'); setParams(DEFAULT_PARAMS); setBeauty(DEFAULT_BEAUTY); setCreativeOptions(DEFAULT_CREATIVE); showToast('촬영 필터가 없어 원본에서 시작합니다'); }
     }
+    creative.cancel();
     setReprocessRecord(record); setEditSrc(source); setEditToken((t) => t + 1); setMode('edit'); setPanel('filters'); creative.setHistoryOpen(false);
   };
 
@@ -745,7 +751,7 @@ export default function App() {
   useEffect(() => { const hide = () => { if (document.hidden) cancelCountdown(); }; document.addEventListener('visibilitychange', hide); return () => { document.removeEventListener('visibilitychange', hide); cancelCountdown(); }; }, [cancelCountdown]);
 
   const saveEdit = useCallback(async () => {
-    if (!editSrc || busy) return;
+    if (!editSrc || busy || !renderReady) return;
     setBusy(true);
     try {
       const compositeResult = reprocessRecord && reprocessRecord.mode !== 'normal' ? await exportReprocessed(reprocessRecord, { ...generalSettings, gentle: look.gentle }, applied.lut, applied.fx) : null;
@@ -781,7 +787,7 @@ export default function App() {
     } finally {
       setBusy(false);
     }
-  }, [busy, editSrc, params, applied, showToast, beauty, showDate, dateFmt, dateSize, dateOrient, dateStyle, creativeOptions, reprocessRecord, creative.remember, keepOriginal]);
+  }, [busy, editSrc, params, applied, showToast, beauty, showDate, dateFmt, dateSize, dateOrient, dateStyle, creativeOptions, reprocessRecord, creative.remember, keepOriginal, renderReady]);
 
   const importLut = useCallback(
     async (files: File[]) => {
@@ -1274,7 +1280,7 @@ export default function App() {
             <img className="shutter-logo" src="/logo.png" alt="" />
           </button>
         ) : (
-          <button className="save" disabled={busy} onClick={saveEdit}>
+          <button className="save" disabled={busy || !renderReady} onClick={saveEdit}>
             저장
           </button>
         )}

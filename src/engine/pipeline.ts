@@ -175,6 +175,7 @@ export class FilterPipeline {
   private lutTex!: WebGLTexture;
   private locs: Record<string, WebGLUniformLocation | null> = {};
   private lutKey: string | null = null;
+  private lutData: LutData | null = null;
   private lutN = 2;
   private srcW = 0;
   private srcMip = false;
@@ -227,6 +228,7 @@ export class FilterPipeline {
     this.warpH = 0;
     this.warpGpu = true;
     this.lutKey = null;
+    this.lutData = null;
     this.locs = {};
 
     const prog = gl.createProgram()!;
@@ -451,8 +453,9 @@ export class FilterPipeline {
   }
 
   setLUT(key: string | null, lut: LutData | null) {
-    if (key === this.lutKey) return;
+    if (key === this.lutKey && lut === this.lutData) return;
     this.lutKey = key;
+    this.lutData = lut;
     this.uploadLut(lut ?? IDENTITY_2);
   }
 

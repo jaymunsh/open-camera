@@ -36,7 +36,7 @@ export function useCreativeCapture(captureFrame: () => Promise<CapturedFrame>, o
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; generation.current++; }; }, []);
   useEffect(() => {
     let live = true;
-    void listCaptures().then((rows) => { if (live) setRecords((current) => recent([...rows.filter((r) => !current.some((v) => v.id === r.id)), ...current])); }).catch(() => { if (live) setWarning('기기 보관함을 사용할 수 없습니다. 촬영은 계속 가능하며 이번 세션에서만 확인할 수 있습니다.'); });
+    void listCaptures().then((rows) => { if (live) setRecords((current) => recent([...rows.filter((r) => !deleted.current.has(r.id) && !current.some((v) => v.id === r.id)), ...current])); }).catch(() => { if (live) setWarning('기기 보관함을 사용할 수 없습니다. 촬영은 계속 가능하며 이번 세션에서만 확인할 수 있습니다.'); });
     return () => { live = false; };
   }, []);
   const remember = useCallback(async (record: CaptureRecord, originals?: Promise<Blob[]>) => {
@@ -57,8 +57,8 @@ export function useCreativeCapture(captureFrame: () => Promise<CapturedFrame>, o
   }, []);
   const remove = async (record: CaptureRecord) => {
     deleted.current.add(record.id);
-    try { if (record.persisted !== false) await deleteCapture(record.id); }
-    catch (e) { deleted.current.delete(record.id); throw e; }
+    try { await deleteCapture(record.id); }
+    catch (e) { if (record.persisted !== false) { deleted.current.delete(record.id); throw e; } }
     setRecords((rows) => rows.filter((r) => r.id !== record.id));
   };
   const cancel = useCallback(() => { generation.current++; remembered.current = null; setFrames([]); setReview(false); setPrepared(null); setPreview(null); setFailure(null); setRetakeIndex(null); setPaused(false); setCountdown(null); }, []);
