@@ -2,13 +2,19 @@ import { expect, test, type Page } from '@playwright/test';
 
 // A physical zoom device is unavailable in CI. Keep the real camera stream and
 // emulate only its optional capability/settings boundary, not App or useCamera.
-async function cameraZoom(page: Page, range: { min: number; max: number; step: number } | null, ignoreOne = false) {
-  await page.addInitScript(({ range, ignoreOne }) => {
+async function cameraZoom(page: Page, range: { min: number; max: number; step: number } | null, ignoreOne = false, rearCount: number | null = null) {
+  await page.addInitScript(({ range, ignoreOne, rearCount }) => {
     const getMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
     const caps = MediaStreamTrack.prototype.getCapabilities;
     const settings = MediaStreamTrack.prototype.getSettings;
     const apply = MediaStreamTrack.prototype.applyConstraints;
     const values = new WeakMap<MediaStreamTrack, { facing: string; zoom: number }>();
+    if (rearCount !== null) navigator.mediaDevices.enumerateDevices = async () =>
+      Array.from({ length: rearCount + 1 }, (_, i) => ({
+        kind: 'videoinput' as const, deviceId: `camera-${i}`, groupId: 'test-cameras',
+        label: i === rearCount ? 'Front Camera' : `Back Camera ${i + 1}`,
+        toJSON() { return {}; },
+      }));
     navigator.mediaDevices.getUserMedia = async (constraints) => {
       const stream = await getMedia(constraints);
       const video = constraints?.video as MediaTrackConstraints;
@@ -33,7 +39,7 @@ async function cameraZoom(page: Page, range: { min: number; max: number; step: n
       }
       return apply.call(this, constraints);
     };
-  }, { range, ignoreOne });
+  }, { range, ignoreOne, rearCount });
 }
 
 async function front(page: Page) {
@@ -41,6 +47,17 @@ async function front(page: Page) {
   await expect(page.getByRole('button', { name: '촬영', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: '카메라 전환', exact: true }).click();
   await expect(page.getByRole('button', { name: '촬영', exact: true })).toBeEnabled();
+  await cameraFrame(page, 'user');
+}
+
+// An absent control during startup is not evidence of an unsupported preset.
+// Wait for frames from the new track, not the previous camera's ready state.
+async function cameraFrame(page: Page, facing: string) {
+  await page.waitForFunction((facing) => {
+    const video = document.querySelector('video');
+    const stream = video?.srcObject as MediaStream | null;
+    return video && video.currentTime > .1 && stream?.getVideoTracks()[0]?.getSettings().facingMode === facing;
+  }, facing);
 }
 
 async function inspect(page: Page) {
@@ -48,6 +65,51 @@ async function inspect(page: Page) {
   await page.locator('.camera-info summary').click();
   return page.locator('.camera-info');
 }
+
+// Catches rear lens-count guesses leaking into the selfie presets. Returning
+// to the back camera must preserve its existing narrow/wide-screen shortcuts.
+for (const [width, rearTele] of [[390, '3'], [430, '5']] as const) {
+  test(`front camera drops rear tele presets at ${width}px without changing back-camera controls`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 932 });
+    await cameraZoom(page, { min: 1, max: 5, step: .1 }, false, 3);
+    await front(page);
+    await expect(page.locator('.zoombar')).toHaveCount(0);
+    await expect(await inspect(page)).toContainText('웹 줌: 1–5');
+    await page.getByRole('button', { name: '메뉴', exact: true }).click();
+    await page.getByRole('button', { name: '카메라 전환', exact: true }).click();
+    await expect(page.locator('.zoombar button')).toHaveText(['1', rearTele]);
+    await page.getByRole('button', { name: '카메라 전환', exact: true }).click();
+    await cameraFrame(page, 'user');
+    await expect(page.locator('.zoombar')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '촬영', exact: true })).toBeEnabled();
+  });
+}
+
+// Catches confusing the minimum zoom with the requested 0.5 preset, and proves
+// the real App applies 0.5 then reads the actual settings of the active track.
+for (const min of [.4, .5]) {
+  test(`front camera offers working half zoom when its reported range starts at ${min}`, async ({ page }) => {
+    await page.setViewportSize({ width: 430, height: 932 });
+    await cameraZoom(page, { min, max: 5, step: .1 }, false, 3);
+    await front(page);
+    await expect(page.locator('.zoombar button')).toHaveText(['.5', '1']);
+    const half = page.locator('.zoombar button').filter({ hasText: /^\.5$/ });
+    await half.click();
+    await expect(half).toHaveClass('on');
+    await expect(await inspect(page)).toContainText('현재 값 0.5');
+    await page.getByRole('button', { name: '메뉴', exact: true }).click();
+    await page.locator('.zoombar button').filter({ hasText: /^1$/ }).click();
+    await expect(page.locator('.zoombar button').filter({ hasText: /^1$/ })).toHaveClass('on');
+    await expect(await inspect(page)).toContainText('현재 값 1');
+  });
+}
+
+test('front camera does not invent half zoom when its reported minimum is above 0.5', async ({ page }) => {
+  await cameraZoom(page, { min: .8, max: 5, step: .1 }, false, 3);
+  await front(page);
+  await expect(page.locator('.zoombar')).toHaveCount(0);
+  await expect(await inspect(page)).toContainText('웹 줌: 0.8–5');
+});
 
 test('front camera without web zoom exposes an honest local report without a fake half-zoom button', async ({ page }) => {
   await cameraZoom(page, null); await front(page);

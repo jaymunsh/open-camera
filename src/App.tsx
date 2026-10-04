@@ -186,6 +186,8 @@ export default function App() {
   const zoomOptions = useMemo(() => {
     if (!zoomCaps) return [] as number[];
     const { min, max } = zoomCaps;
+    // Selfie presets come from this track's range, not rear lens-count guesses.
+    if (facing === 'user') return [.5, 1].filter((value) => value >= min && value <= max);
     const r1 = (v: number) => Math.round(v * 10) / 10;
     const list: number[] = [];
     const uw = min < 1;
@@ -198,7 +200,7 @@ export default function App() {
       if (tele > 1 && tele <= max) list.push(tele);
     }
     return list;
-  }, [zoomCaps, backCams]);
+  }, [zoomCaps, backCams, facing]);
 
   const zoomValRef = useRef(zoom);
   zoomValRef.current = zoom;
