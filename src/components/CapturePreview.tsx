@@ -1,15 +1,19 @@
-import { useEffect, useRef, type MutableRefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, type MutableRefObject, type RefObject } from 'react';
 import { compositionLayout } from '../capture/composite';
 import type { CapturedFrame, CompositionOptions } from '../capture/types';
 
 export type PreviewDraw = ((source: HTMLCanvasElement) => void) | null;
-export function CapturePreview({ mode, frames, options, nextIndex, ratio, rect, viewSize, drawRef }: {
+export function CapturePreview({ mode, frames, options, nextIndex, countdown, gridOn, ratio, sourceRect, rect, viewSize, drawRef, progressRef }: {
   mode: 'half' | 'booth'; frames: CapturedFrame[]; options: CompositionOptions; nextIndex: number;
+  countdown: number | null; gridOn: boolean;
   ratio: { w: number; h: number }; rect: { left: number; top: number; w: number; h: number };
+  sourceRect: { left: number; top: number; w: number; h: number };
   viewSize: { w: number; h: number }; drawRef: MutableRefObject<PreviewDraw>;
+  progressRef: RefObject<HTMLDivElement | null>;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
-  const layout = compositionLayout(frames[0]?.canvas.width ?? ratio.w * 1000, frames[0]?.canvas.height ?? ratio.h * 1000, mode, options, Math.min(140, rect.w * .36, rect.h * .28));
+  const frameRef = useRef<HTMLDivElement>(null);
+  const layout = compositionLayout(frames[0]?.canvas.width ?? ratio.w * 1000, frames[0]?.canvas.height ?? ratio.h * 1000, mode, options, Math.min(2048, Math.max(rect.w, rect.h) * Math.min(devicePixelRatio || 1, 2)));
   useEffect(() => {
     const canvas = ref.current;
     if (!canvas) return;
@@ -18,26 +22,49 @@ export function CapturePreview({ mode, frames, options, nextIndex, ratio, rect, 
     let last = -Infinity;
     const draw = (source: HTMLCanvasElement | null) => {
       const now = performance.now();
-      if (now - last < 100) return;
+      if (now - last < 1000 / 30) return;
       last = now;
       ctx.fillStyle = options.paper === 'black' ? '#000' : '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
       const sx = (source?.width ?? 0) / viewSize.w, sy = (source?.height ?? 0) / viewSize.h;
       layout.cells.forEach((r, i) => {
-        if (i === nextIndex && source) ctx.drawImage(source, rect.left * sx, rect.top * sy, rect.w * sx, rect.h * sy, r.x, r.y, r.w, r.h);
+        if (i === nextIndex && source) ctx.drawImage(source, sourceRect.left * sx, sourceRect.top * sy, sourceRect.w * sx, sourceRect.h * sy, r.x, r.y, r.w, r.h);
         else if (i !== nextIndex && frames[i]) ctx.drawImage(frames[i].canvas, r.x, r.y, r.w, r.h);
         else { ctx.fillStyle = '#232323'; ctx.fillRect(r.x, r.y, r.w, r.h); }
-        if (i === nextIndex) { ctx.strokeStyle = '#8a7cff'; ctx.lineWidth = 2; ctx.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2); }
-        if (r.w >= 20 && r.h >= 20) {
-          ctx.fillStyle = '#151515'; ctx.fillRect(r.x + 2, r.y + 2, 14, 14);
-          ctx.fillStyle = '#fff'; ctx.font = '10px system-ui'; ctx.fillText(String(i + 1), r.x + 6, r.y + 12);
-        }
       });
     };
     // Frozen cuts remain visible while the camera restarts after review.
     draw(null);
     drawRef.current = draw;
     return () => { if (drawRef.current === draw) drawRef.current = null; };
-  }, [mode, frames, options, nextIndex, rect, viewSize, drawRef, layout.width, layout.height]);
-  const top = Math.max(rect.top, Math.min(Math.max(rect.top + 8, 62), rect.top + rect.h - layout.height - 12));
-  return <div className="capture-mini" role="img" aria-label={`${mode === 'half' ? '하프프레임' : '네 컷'} 합성 미리보기 · ${nextIndex + 1}번째 촬영`} style={{ left: rect.left + rect.w - layout.width - 18, top, width: layout.width }}><canvas ref={ref} /></div>;
+  }, [mode, frames, options, nextIndex, sourceRect, viewSize, drawRef, layout.width, layout.height]);
+  useLayoutEffect(() => {
+    const hud = progressRef.current?.getBoundingClientRect();
+    if (!hud || !frameRef.current) return;
+    const labels = [...frameRef.current.querySelectorAll<HTMLElement>('.cell-label')];
+    labels.forEach((label) => { label.style.top = ''; });
+    const boxes = labels.map((label) => ({ label, tag: label.getBoundingClientRect(), cell: label.parentElement!.getBoundingClientRect() }));
+    // Keep each row aligned below the real action bar, not a guessed HUD size.
+    const blockedRows = boxes.filter(({ tag }) => tag.left < hud.right && tag.right > hud.left && tag.top < hud.bottom && tag.bottom > hud.top).map(({ cell }) => cell.top);
+    boxes.forEach(({ label, tag, cell }) => {
+      if (!blockedRows.some((top) => Math.abs(top - cell.top) < 1)) return;
+      const top = hud.bottom - cell.top + 8;
+      if (top + tag.height <= cell.height - 4) label.style.top = `${top}px`;
+    });
+  }, [mode, frames, nextIndex, countdown, rect, progressRef]);
+  return <div className="capture-preview" role="img" aria-label={`${mode === 'half' ? '하프프레임' : '네 컷'} 분할 촬영 화면 · ${nextIndex + 1}번째 촬영`}>
+    <div ref={frameRef} className="capture-frame" style={{ left: rect.left, top: rect.top, width: rect.w, height: rect.h }}>
+      <canvas ref={ref} />
+      {layout.cells.map((r, i) => {
+        const current = i === nextIndex, complete = !current && !!frames[i];
+        const w = rect.w * r.w / layout.width, h = rect.h * r.h / layout.height;
+        const small = w < 90 || h < 55;
+        const countSize = Math.min(64, w * .35, h * .6);
+        return <div key={i} aria-hidden="true" className={`capture-cell ${current ? 'current' : complete ? 'complete' : 'pending'}${small ? ' small' : ''}`} style={{ left: `${r.x / layout.width * 100}%`, top: `${r.y / layout.height * 100}%`, width: `${r.w / layout.width * 100}%`, height: `${r.h / layout.height * 100}%` }}>
+          <span className="cell-label">{i + 1}<span className="cell-state"> · {current ? '현재 컷' : complete ? '완료' : '대기'}</span></span>
+          {current && gridOn && <div className="grid-overlay"><i className="v1" /><i className="v2" /><i className="h1" /><i className="h2" /></div>}
+          {current && countdown !== null && <span className="cell-countdown" style={{ width: countSize, height: countSize, fontSize: countSize * .6 }}>{countdown}</span>}
+        </div>;
+      })}
+    </div>
+  </div>;
 }

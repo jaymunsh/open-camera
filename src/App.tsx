@@ -37,7 +37,7 @@ import { saveImage } from './utils/share';
 import { renderStampRed, renderStampSoft, stampFontReady } from './engine/datestamp';
 import { deriveFx, type RenderLook } from './engine/look';
 import { useCreativeCapture } from './capture/useCreativeCapture';
-import { canvasBlob, composeFrames, snapshotFrame } from './capture/composite';
+import { canvasBlob, composeFrames, compositionLayout, snapshotFrame } from './capture/composite';
 import type { CameraSettings, CapturedFrame, CaptureRecord, StampStyle } from './capture/types';
 import { validateSettings } from './capture/recipes';
 import { renderReprocessed, exportReprocessed } from './capture/reprocess';
@@ -114,6 +114,7 @@ export default function App() {
   const [compositeRatioIdx, setCompositeRatioIdx] = useState(2);
   const [lensPreviewSource, setLensPreviewSource] = useState<HTMLCanvasElement | null>(null);
   const compositeDrawRef = useRef<PreviewDraw>(null);
+  const captureProgressRef = useRef<HTMLDivElement>(null);
   const [gridOn, setGridOn] = useState(() => localStorage.getItem('oc-grid') === '1');
   const [menuOpen, setMenuOpen] = useState(false);
   const [dateMode, setDateMode] = useState<'auto' | 'on' | 'off'>(() => {
@@ -935,7 +936,7 @@ export default function App() {
 
   const thumbKey = `${mode}-${ready}-${facing}-${editSrc ? `img${editToken}` : 'none'}`;
 
-  const frameRect = useMemo(() => {
+  const sourceFrameRect = useMemo(() => {
     if (!viewSize.w || !viewSize.h) return null;
     const ta = ratio.w / ratio.h;
     const ca = viewSize.w / viewSize.h;
@@ -951,6 +952,15 @@ export default function App() {
     // Match the centered GPU viewport for every camera ratio.
     return { left: (viewSize.w - w) / 2, top: (viewSize.h - h) / 2, w, h };
   }, [viewSize, ratio]);
+
+  const frameRect = useMemo(() => {
+    if (!sourceFrameRect || mode !== 'camera' || !tiledMode) return sourceFrameRect;
+    const first = creative.frames[0]?.canvas;
+    const size = compositionLayout(first?.width ?? ratio.w * 1000, first?.height ?? ratio.h * 1000, creative.mode === 'booth' ? 'booth' : 'half', creative.options, Infinity);
+    const scale = Math.min(viewSize.w / size.width, viewSize.h / size.height);
+    const w = size.width * scale, h = size.height * scale;
+    return { left: (viewSize.w - w) / 2, top: (viewSize.h - h) / 2, w, h };
+  }, [sourceFrameRect, mode, tiledMode, creative.mode, creative.frames, creative.options, ratio, viewSize]);
 
   const imgRect = useMemo(() => {
     if (mode === 'camera') return frameRect;
@@ -1119,9 +1129,9 @@ export default function App() {
       >
         <canvas ref={canvasRef} />
         <video ref={videoRef} playsInline muted autoPlay onLoadedData={onLoaded} />
-        {mode === 'camera' && (creative.mode === 'half' || creative.mode === 'booth') && frameRect && !creative.review && !creative.historyOpen && <CapturePreview mode={creative.mode} frames={creative.frames} options={creative.options} nextIndex={creative.nextIndex} ratio={ratio} rect={frameRect} viewSize={viewSize} drawRef={compositeDrawRef} />}
+        {mode === 'camera' && (creative.mode === 'half' || creative.mode === 'booth') && sourceFrameRect && frameRect && !creative.review && <CapturePreview mode={creative.mode} frames={creative.frames} options={creative.options} nextIndex={creative.nextIndex} countdown={creative.countdown} gridOn={gridOn} ratio={ratio} sourceRect={sourceFrameRect} rect={frameRect} viewSize={viewSize} drawRef={compositeDrawRef} progressRef={captureProgressRef} />}
         {mode === 'camera' && guideImage && frameRect && !creative.review && <img className="exposure-guide" src={guideImage} alt="첫 촬영 구도 안내" style={{ left: frameRect.left, top: frameRect.top, width: frameRect.w, height: frameRect.h }} />}
-        {mode === 'camera' && creative.mode !== 'normal' && <div className="capture-progress" role="status" onPointerDown={(e) => e.stopPropagation()}>
+        {mode === 'camera' && creative.mode !== 'normal' && <div ref={captureProgressRef} className="capture-progress" role="status" onPointerDown={(e) => e.stopPropagation()}>
           <span>{creative.mode === 'half' ? '하프프레임' : creative.mode === 'booth' ? '네 컷' : '다중노출'} · {Math.min(creative.nextIndex + 1, creative.target)}/{creative.target}{creative.countdown !== null ? ` · ${creative.countdown}초` : ''}</span>
           {creative.mode === 'booth' && creative.paused && creative.frames.length < 4 && creative.retakeIndex === null && <button onClick={creative.resume}>계속 촬영</button>}
           {creative.frames.length > 0 && <button disabled={creative.working} onClick={() => { cancelCountdown(); creative.cancel(); }}>취소</button>}
@@ -1201,7 +1211,7 @@ export default function App() {
             원본보기
           </button>
         )}
-        {mode === 'camera' && gridOn && frameRect && (
+        {mode === 'camera' && !tiledMode && gridOn && frameRect && (
           <div
             className="grid-overlay"
             style={{

@@ -55,8 +55,8 @@ test('booth keeps selected square cells through retake and unlocks after cancel'
   await page.getByRole('button', { name: '3번째 다시 찍기', exact: true }).click();
   await expect(page.getByRole('button', { name: '비율', exact: true })).toHaveText('1:1');
   await expect(page.getByRole('button', { name: '비율', exact: true })).toBeDisabled();
-  await expect(page.locator('.capture-mini')).toHaveAccessibleName(/3번째 촬영/);
-  await expect.poll(() => page.locator('.capture-mini canvas').evaluate((c: HTMLCanvasElement) => Array.from(c.getContext('2d')!.getImageData(Math.floor(c.width / 4), Math.floor(c.height / 4), 1, 1).data).slice(0, 3).some((v) => v > 0)), { timeout: 1500 }).toBe(true);
+await expect(page.locator('.capture-preview')).toHaveAccessibleName(/3번째 촬영/);
+  await expect.poll(() => page.locator('.capture-preview canvas').evaluate((c: HTMLCanvasElement) => Array.from(c.getContext('2d')!.getImageData(Math.floor(c.width / 4), Math.floor(c.height / 4), 1, 1).data).slice(0, 3).some((v) => v > 0)), { timeout: 1500 }).toBe(true);
   await page.screenshot({ path: 'test-results/capture-ui-booth-retake.png' });
   await page.getByRole('button', { name: '취소', exact: true }).click();
   await expect(page.getByRole('button', { name: '비율', exact: true })).toBeEnabled();
@@ -76,8 +76,8 @@ for (const [width, height] of [[390, 844], [1440, 900], [320, 740], [844, 390], 
     await page.setViewportSize({ width, height }); await page.goto('http://127.0.0.1:5186/');
     const download = page.waitForEvent('download'); await page.getByRole('button', { name: '촬영', exact: true }).click(); await download;
     await choose(page, '하프프레임', '1:1'); await page.getByRole('button', { name: '촬영', exact: true }).click();
-    await expect(page.locator('.capture-mini')).toHaveAccessibleName(/2번째 촬영/);
-    const viewer = (await page.locator('.viewer').boundingBox())!, mini = (await page.locator('.capture-mini').boundingBox())!;
+await expect(page.locator('.capture-preview')).toHaveAccessibleName(/2번째 촬영/);
+const viewer = (await page.locator('.viewer').boundingBox())!, mini = (await page.locator('.capture-frame').boundingBox())!;
     expect(mini.x).toBeGreaterThanOrEqual(viewer.x); expect(mini.y).toBeGreaterThanOrEqual(viewer.y);
     expect(mini.x + mini.width).toBeLessThanOrEqual(viewer.x + viewer.width);
     expect(mini.y + mini.height).toBeLessThanOrEqual(viewer.y + viewer.height);
@@ -92,7 +92,7 @@ for (const [width, height] of [[390, 844], [1440, 900], [320, 740], [844, 390], 
 
 test('live half preview advances the active cell while its captured cell stays frozen', async ({ page }) => {
   await page.goto('/'); await choose(page, '하프프레임', '1:1');
-  const mini = page.locator('.capture-mini'); const canvas = mini.locator('canvas');
+const mini = page.locator('.capture-preview'); const canvas = mini.locator('canvas');
   await expect(mini).toHaveAccessibleName(/1번째 촬영/);
   await page.getByRole('button', { name: '촬영', exact: true }).click();
   await expect(mini).toHaveAccessibleName(/2번째 촬영/);
