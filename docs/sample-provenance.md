@@ -6,6 +6,8 @@ Shared prompt: Use case photorealistic-natural; neutral camera filter comparison
 
 Original PNG outputs are preserved in `public/samples/masters/`. `scripts/prepare-samples.mjs` derives 512×512 WebP at quality 0.92 using Chromium canvas, without color effects. The build computes SHA-256 versions from each pair of file bytes; generated asset hashes can be reproduced with `shasum -a 256 public/samples/{concepts,masters}/*`.
 
+The preserved PNGs retain their native 1254×1254 pixels. Full prompts are embedded as PNG text metadata and retained in sibling `.prompt.txt` files. WebP provenance is recorded in sibling `.webp.json` sidecars. Metadata embedding does not alter the image pixels; build versions reflect the final file bytes. The provenance scan found 14 raster assets and none missing prompt provenance.
+
 ## portrait
 
 A fictional Korean adult woman with natural skin texture and dark hair, wearing a cream cotton shirt, waist-up candid portrait by a large window, soft daylight, neutral gray background, natural restrained depth of field. No beauty retouching.
@@ -47,4 +49,3 @@ Source: `/Users/sunghyuk/Library/Application Support/orca/codex-accounts/c5d6a29
 A peaceful apartment corner with white plaster wall, linen chair, wood side table, plant and warm table lamp mixed with natural window daylight. Accurate whites, realistic fabric and wood textures.
 
 Source: `/Users/sunghyuk/Library/Application Support/orca/codex-accounts/c5d6a29b-164d-4627-8bfd-fdd1451964d3/home/generated_images/01a0c023-34a6-7072-8094-728580b85372/exec-d3d4b1da-eb19-4107-9968-ed41614654a8.png`
-

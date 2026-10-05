@@ -28,3 +28,19 @@ test('thumbnails restore sample A, separate strengths and recover after failed L
   });
   expect(result).toEqual({ different: true, restored: true, strength: true, errors: 1, recovered: true, cancelled: true });
 });
+
+test('source and LUT versions invalidate a same-ID thumbnail without colon key collisions', async ({ page }) => {
+  await page.goto('/');
+  const result = await page.evaluate(async () => {
+    const path = '/src/components/thumbs.ts'; const { renderPresetThumbs } = await import(path);
+    const source = document.createElement('canvas'); source.width = source.height = 64;
+    const output = document.createElement('canvas'); output.width = output.height = 128; document.body.append(output);
+    const refs = new Map([[output, 'none']]); const ctx = source.getContext('2d')!;
+    const render = (version: string, lutVersion: string) => renderPresetThumbs(refs, [{ id: 'none', version: lutVersion }], null, () => false, { srcKey: 'import:a:b', source, sourceVersion: version });
+    ctx.fillStyle = 'red'; ctx.fillRect(0, 0, 64, 64); await render('v1', 'lut1'); const first = output.toDataURL();
+    ctx.fillStyle = 'blue'; ctx.fillRect(0, 0, 64, 64); await render('v2', 'lut1'); const next = output.toDataURL();
+    ctx.fillStyle = 'green'; ctx.fillRect(0, 0, 64, 64); await render('v2', 'lut2'); const replaced = output.toDataURL();
+    return new Set([first, next, replaced]).size;
+  });
+  expect(result).toBe(3);
+});

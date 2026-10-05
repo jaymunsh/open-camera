@@ -27,8 +27,8 @@ test('comparison rejects missing LUT, invalid strength and aborted jobs', async 
     const source = freezePreviewSource({ source: c, kind: 'scene', label: 'test', ratio: null, mirror: false });
     const normal = { id: 'mono', label: 'mono', custom: false, amount: 1 }; const aborted = new AbortController(); aborted.abort();
     const rejects = [];
-    for (const [choice, signal] of [[{ ...normal, id: 'missing', custom: true }, new AbortController().signal], [{ ...normal, amount: NaN }, new AbortController().signal], [normal, aborted.signal]]) rejects.push(await mod.renderColorComparison(source, choice, normal, signal).then(() => false, () => true));
+    for (const [choice, signal] of [[{ ...normal, id: 'missing', custom: true }, new AbortController().signal], [{ ...normal, amount: NaN }, new AbortController().signal], [{ ...normal, amount: -0.1 }, new AbortController().signal], [{ ...normal, amount: 1.1 }, new AbortController().signal], [normal, aborted.signal]]) rejects.push(await mod.renderColorComparison(source, choice, normal, signal).then(() => false, () => true));
     source.release(); return rejects;
   });
-  expect(result).toEqual([true, true, true]);
+  expect(result).toEqual([true, true, true, true, true]);
 });

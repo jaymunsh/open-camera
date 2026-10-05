@@ -111,7 +111,7 @@ body,
 .preview-selector-row > button:first-child { flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .preview-selector-row > button:last-child { color: var(--camera-accent); }
 .preview-source-picker { padding-top: 12px; }
-.sample-choices { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 8px; }
+.sample-choices { display: grid; grid-template-columns: repeat(4, minmax(0, 84px)); gap: 10px 8px; }
 .sample-choices .sample-choice { background: transparent; min-width: 0; padding: 0; text-align: center; }
 .sample-choice img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; }
 .sample-choice span { display: block; margin-top: 6px; }

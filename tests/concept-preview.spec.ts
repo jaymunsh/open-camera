@@ -21,3 +21,14 @@ test('seven source samples share thumbnails without changing the filter or camer
   expect(await page.evaluate(() => localStorage.getItem('oc-preview-sample'))).toBe('food');
   expect(await page.evaluate(() => (window as any).cameraCalls)).toBe(initialCalls);
 });
+
+test('imported photo is the default source and choosing a sample leaves the edit input unchanged', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('input[type=file]').first().setInputFiles('public/samples/concepts/food.webp');
+  await expect(page.getByRole('button', { name: '저장', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: '필터 전체 보기', exact: true }).click();
+  await page.getByRole('button', { name: '편집 사진', exact: true }).click();
+  await page.getByRole('group', { name: '비교 사진 선택' }).getByRole('button', { name: '야간', exact: true }).click();
+  await expect(page.getByRole('button', { name: '샘플 · 야간', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '닫기', exact: true }).click(); await expect(page.getByRole('button', { name: '저장', exact: true })).toBeEnabled();
+});

@@ -5,6 +5,17 @@ iOS 카메라 경험을 목표로 한 설치형 PWA. WebGL2 싱글 패스 셰이
 
 ## 전체 구조
 
+### 콘셉트 미리보기 / 색감 비교 (2026-10-05)
+
+- `preview/samples.ts`는 7종 샘플, 선택 ID, 실패 재시도, thumb/master 로딩을 분리합니다. 512px WebP는 모두 캐시하고 고해상도 PNG는 비교 진입 때만 읽으며 최근 2개 참조만 유지합니다. 파일 쌍의 SHA-256 버전을 URL에 넣고 동일 URL을 PWA precache에 등록합니다.
+- `preview/source.ts`는 긴 변 최대 1024의 owned 2D 캔버스로 동결합니다. 현재 장면은 한 번 크롭·미러하고, 이미 처리한 편집 사진/보관 원본에는 다시 적용하지 않습니다. 촬영 비교는 `record.originals[index]`만 사용하며 결과 `blob`을 원본으로 대체하지 않습니다. 개인 사진은 서버/설정 저장소에 보내지 않습니다.
+- `usePreviewSource`는 선택·로딩·오류·최근 요청 토큰과 소유권을 관리합니다. 샘플 전환은 촬영 스트림이나 설정을 바꾸지 않습니다. 비교는 별도 원본 복사본을 사용하므로 썸네일 소스가 바뀌어도 진행 중인 렌더 입력은 유지됩니다.
+- `preview/compare.ts`는 기존 export 파이프라인을 순차 재사용합니다. 기본 파라미터·FX 없음·날짜 없음·뷰티 없음·미러 false·ratio null로 원본/A/B를 렌더하고 실패/취소 때 출력 캔버스를 해제합니다. 색감만 비교하며 전체 질감을 재현한다고 표시하지 않습니다.
+- 썸네일 키는 source/asset/LUT 버전·강도·FX tuple입니다. `ThumbnailCache`는 128px 출력을 최대 256개 LRU로 유지하고, IntersectionObserver로 보이는 항목부터 생성합니다. LUT 실패는 identity 결과로 성공 처리하지 않습니다.
+- 비교 동안 기존 필터 시트/최근 촬영은 mounted·inactive 상태로 남겨 선택과 스크롤을 보존합니다. 활성 focus trap은 한 개이며 닫은 뒤 진입 제어로 복귀합니다. 명시적 적용은 LUT ID와 강도만 바꾸고 grainOff·패턴 seed·날짜·뷰티·수동 설정은 보존합니다.
+- StudioDisclosure는 native details/summary의 화면 상태만 갖고 모든 제품 설정은 기존 부모 상태에 유지합니다. 활성 렌즈/패턴은 처음부터 펼치며 닫힌 요약에도 현재 상태와 저장 문제가 남습니다.
+- 이미지 프롬프트·원본 경로·변환 방식은 `docs/sample-provenance.md`, 검증 경계는 `docs/preview-comparison-verification.md`에 기록합니다. 새 LUT 번들·새 저장 스키마·카메라 라이프사이클 변경은 없습니다.
+
 ```
 ┌─────────────────────────────────────────────────────┐
 │ App.tsx — 모든 상태 소유 (mode, params, lutId, fx…) │
