@@ -2,7 +2,7 @@
 version: 1
 slug: "src-app-tsx"
 primary_target: "src/App.tsx"
-related_targets: ["src/components/CreativeSettings.tsx","src/components/CaptureWorkspace.tsx","src/styles.css"]
+related_targets: ["src/components/CreativeSettings.tsx","src/components/CaptureWorkspace.tsx","src/components/LutComparison.tsx","src/components/PreviewSourcePicker.tsx","src/components/StudioDisclosure.tsx","src/styles.css"]
 ---
 
 # Camera Studio extension
@@ -31,7 +31,9 @@ survive a live frame change. Retain incumbent motion, no decorative new entrance
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
 
 For this ordinary extension, documentation checks the incumbent system without
-creating or rewriting missing global design files. No new shipping raster assets.
+creating or rewriting missing global design files. The original Studio extension
+added no raster assets; the approved concept extension below adds seven photos
+with recorded provenance.
 
 Preserve the incumbent black camera shell, purple selected state, filter controls,
 camera geometry and centered shutter. Move the saved-photo thumbnail to the

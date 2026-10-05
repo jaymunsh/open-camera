@@ -8,6 +8,18 @@ Original PNG outputs are preserved in `public/samples/masters/`. `scripts/prepar
 
 The preserved PNGs retain their native 1254×1254 pixels. Full prompts are embedded as PNG text metadata and retained in sibling `.prompt.txt` files. WebP provenance is recorded in sibling `.webp.json` sidecars. Metadata embedding does not alter the image pixels; build versions reflect the final file bytes. The provenance scan found 14 raster assets and none missing prompt provenance.
 
+Final application versions (SHA-256 of WebP bytes followed by PNG bytes, first 16 hex characters):
+
+| Sample | Version |
+| --- | --- |
+| portrait | `6b5370d61c733cc1` |
+| food | `7f8ea5cc687b03d4` |
+| landscape | `7ed24b19b509b6b5` |
+| cafe | `4096a5f24571b226` |
+| street | `2348974662e0d3ff` |
+| night | `99dc5dba9f1275fe` |
+| interior | `46d4995a2adde16b` |
+
 ## portrait
 
 A fictional Korean adult woman with natural skin texture and dark hair, wearing a cream cotton shirt, waist-up candid portrait by a large window, soft daylight, neutral gray background, natural restrained depth of field. No beauty retouching.
