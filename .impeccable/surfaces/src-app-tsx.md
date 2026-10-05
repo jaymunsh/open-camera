@@ -106,3 +106,15 @@ occupied area only while enabled. No camera crop, capture pixels, LUT values,
 recipe scope or export behavior changes. Verify four viewport sets, storage denial,
 focus return, no overlay collision and the full suite. No new visual world, seed,
 comp or raster assets apply to this approved local extension.
+
+2026-10-05 approved signature-film-quality extension: preserve this Operate
+world and camera composition. Add one collapsed Film Texture section in Effects,
+not a new camera toolbar. Existing/new processing is explicit; two primary
+ranges and three size presets precede optional detailed controls. A frozen-photo
+texture comparison uses the protected CameraDialog and makes its exclusions
+clear, with no Apply action. Fixed effect off/cancel footer stays reachable.
+Settings inspection reads versioned snapshots and distinguishes stored inactive
+values from effective amounts. First-cut locks apply to every writer. Signature:
+switch texture on/off on the same photo without changing LUT, date or beauty.
+No visual-world seed, comp or new raster assets apply; four viewport verification
+and fresh finish review/documentation remain required.

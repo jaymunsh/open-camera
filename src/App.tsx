@@ -56,6 +56,7 @@ import { CapturePreview, type PreviewDraw, type PreviewSize } from './components
 import { LensComparison } from './components/LensComparison';
 import { CameraInfo } from './components/CameraInfo';
 import { FilmVariationControls } from './components/FilmVariationControls';
+import { FilmQualityControls } from './components/FilmQualityControls';
 import { PreviewSourcePicker } from './components/PreviewSourcePicker';
 import { LutComparison } from './components/LutComparison';
 import { SettingsOverview, type SettingsDestination, type SettingsSnapshot } from './components/SettingsOverview';
@@ -175,6 +176,10 @@ export default function App() {
   const [editPatterns, setEditPatterns] = useState<(FilmPattern | null)[] | undefined>();
   const captureFrameRef = useRef<(() => Promise<CapturedFrame>) | null>(null);
   const creative = useCreativeCapture(() => captureFrameRef.current!(), setGlError);
+  // Half-frame keeps per-cut color choices, but a quality recipe is a whole-camera snapshot.
+  const qualityLocked = creative.locked || (creative.mode === 'half' && creative.frames.length > 0);
+  const settingsWriteLocked = useRef(false);
+  settingsWriteLocked.current = busy || creative.working || qualityLocked;
   const tiledMode = creative.mode === 'half' || creative.mode === 'booth' || creative.mode === 'instant';
   const captureRatioIdx = creative.mode !== 'normal' && creative.frames.length ? creative.frames[0].settings.ratioIdx : creative.mode === 'instant' ? creative.options.instantFormat === 'portrait' ? 2 : 0 : tiledMode ? compositeRatioIdx : ratioIdx;
   const ratio = RATIOS[captureRatioIdx];
@@ -725,17 +730,19 @@ export default function App() {
   const previewToolbar = <div className="preview-selector"><div className="preview-selector-row"><button aria-expanded={sourcePickerOpen} onClick={() => setSourcePickerOpen(!sourcePickerOpen)}>{previewLabel}<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m6 9 6 6 6-6" /></svg></button><button disabled={preview.busy || !!preview.error || comparisonLoading} onClick={() => void openComparison()}>색감 비교</button></div>{sourcePickerOpen && sourcePicker}{preview.error && !sourcePickerOpen && <p role="alert" className="camera-warning">{preview.error} <button onClick={() => void preview.retry()}>다시 시도</button></p>}{comparisonError && !comparisonSource && <p role="alert" className="camera-warning">{comparisonError} <button onClick={() => void openComparison()}>다시 시도</button></p>}</div>;
   const applyComparison = (choice: ComparisonChoice) => {
     if (busy || creative.working || creative.locked || pendingLut || preview.busy || preview.error || comparisonLoading || comparisonError) return;
+    if (qualityLocked && signatureFilm(choice.id) && !filmQuality.settings) return;
     if (choice.id !== lutId) comparisonApplying.current = true;
     if (signatureFilm(choice.id) && !filmQuality.settings) filmQuality.update({ ...DEFAULT_FILM_QUALITY });
     setLutId(choice.id); setLutIntensity(choice.amount); closeComparison();
   };
   const selectFilm = useCallback((id: string) => {
     if (busy || creative.working || creative.locked) return;
+    if (qualityLocked && (signatureFilm(id) || filmQuality.settings?.origin === 'profile')) return;
     if (signatureFilm(id)) {
       if (filmQuality.settings?.origin !== 'manual') filmQuality.update(createSignatureQuality(id, filmQuality.settings?.seed ?? .5));
     } else if (filmQuality.settings?.origin === 'profile') filmQuality.update(undefined);
     setLutId(id);
-  }, [busy, creative.working, creative.locked, filmQuality.settings, filmQuality.update]);
+  }, [busy, creative.working, creative.locked, qualityLocked, filmQuality.settings, filmQuality.update]);
 
   const confirmEditEntry = useCallback(() => !creative.frames.length || window.confirm('진행 중인 촬영을 버리고 사진 편집을 시작할까요?'), [creative.frames.length]);
   const openImage = useCallback(async (f: File) => {
@@ -756,13 +763,16 @@ export default function App() {
   const updateEditVariation = (preferences: typeof variation.settings) => {
     setReprocessRecord(record => record ? { ...record, frameSettings: record.originals.map((_, index) => ({ ...(record.frameSettings?.[index] ?? generalSettings), variation: { ...preferences } })) } : record);
   };
-  const applyCameraSettings = async (value: CameraSettings, restoredPatterns?: (FilmPattern | null)[]) => {
+  const applyCameraSettings = async (value: CameraSettings, restoredPatterns?: (FilmPattern | null)[], restore = false) => {
+    const checkWritable = () => { if (!restore && settingsWriteLocked.current) throw new Error('촬영 중에는 레시피를 적용할 수 없어요. 촬영을 마치거나 취소해주세요.'); };
+    checkWritable();
     const s = validateSettings(value);
     if (s.lutId !== 'none' && !PRESETS.some((p) => p.id === s.lutId) && !signatureFilm(s.lutId) && !customs.some((c) => c.id === s.lutId)) throw new Error('이 레시피의 사용자 LUT가 없습니다. LUT를 다시 가져와주세요.');
     if (s.lutId !== 'none' && !loadedLuts[s.lutId]) {
       const loaded = await (customs.some((c) => c.id === s.lutId) ? loadCustomLut(s.lutId) : signatureFilm(s.lutId) ? loadSignatureCandidate(s.lutId) : loadPresetLut(s.lutId));
       setLoadedLuts((rows) => ({ ...rows, [s.lutId]: loaded }));
     }
+    checkWritable();
     recipeApplying.current = s.lutId !== lutId;
     setLutId(s.lutId); setLutIntensity(s.intensity); setParams(s.params); setBeauty(s.beauty); setGrainOff(s.grainOff); setRatioIdx(s.ratioIdx);
     filmQuality.update(s.filmQuality);
@@ -817,7 +827,7 @@ export default function App() {
     }
     const source = record.mode === 'normal' ? sources[0] : composeFrames(sources, record.mode, record.composition ?? {});
     if (record.settings) {
-      try { await applyCameraSettings({ ...record.settings, variation: restoredVariation, beauty: { ...DEFAULT_BEAUTY } }, restoredPatterns); }
+      try { await applyCameraSettings({ ...record.settings, variation: restoredVariation, beauty: { ...DEFAULT_BEAUTY } }, restoredPatterns, true); }
       catch (error) { if (error instanceof FilmQualityError) { for (const canvas of sources) canvas.width = canvas.height = 0; throw error; } setLutId('none'); filmQuality.update(undefined); setParams(DEFAULT_PARAMS); setBeauty(DEFAULT_BEAUTY); setCreativeOptions(DEFAULT_CREATIVE); variation.apply(DEFAULT_VARIATION); showToast('촬영 필터가 없어 원본에서 시작합니다'); }
     }
     if (!record.settings) variation.apply(restoredVariation, restoredPatterns ? [...restoredPatterns].reverse().find(p => p !== null) ?? null : null);
@@ -1174,7 +1184,7 @@ export default function App() {
   };
   const cancelStudioEffects = () => {
     const entry = studioEffectsEntry.current;
-    if (!entry || busy || creative.working || creative.locked) return;
+    if (!entry || settingsWriteLocked.current) return;
     const s = entry.settings;
     // Restore the exact grain seed and mute flag, not the usual new-filter defaults.
     preservePresetFx.current = s.lutId !== lutId;
@@ -1192,7 +1202,7 @@ export default function App() {
     setCreativeOpen(false);
   };
   const clearStudioEffects = () => {
-    if (busy || creative.working || creative.locked) return;
+    if (settingsWriteLocked.current) return;
     setLutId('none'); setLutIntensity(1); setGrainOff(false); setCreativeOptions({ ...DEFAULT_CREATIVE });
     filmQuality.update(undefined);
     changeVariation({ ...variation.settings, mode: 'off' });
@@ -1236,6 +1246,7 @@ export default function App() {
     torch: facing === 'environment' && torchOk ? torchOn ? 'on' : 'off' : 'unavailable',
     gentleAvailable, showDate, beautyAvailable: !reprocessRecord || reprocessRecord.mode === 'normal',
     patternSeed: previewPattern?.seed ?? null,
+    resolvedFilmQuality: look.filmQuality,
     mixedPatterns: !!editPatterns && (new Set(editPatterns.map(p => p?.seed ?? null)).size > 1),
   };
   const settingsCovered = creativeOpen || creative.review || creative.historyOpen || sheetOpen || dateSheet || recipeOpen || settingsOverviewOpen || licOpen || lutModalOpen || !!comparisonSource;
@@ -1287,7 +1298,7 @@ export default function App() {
                 <button disabled={busy || creative.working} onClick={openSettingsOverview}>전체 설정 보기</button>
                 <button disabled={busy || creative.working} onClick={() => { cancelCountdown(); creative.pause(); setMenuOpen(false); creative.setHistoryOpen(true); }}>최근 촬영</button>
                 <button disabled={busy || creative.working} onClick={() => openStudio('shooting')}>촬영 모드 · 효과</button>
-                <button disabled={busy || creative.working || creative.locked || pendingLut} onClick={() => { setMenuOpen(false); setRecipeOpen(true); }}>카메라 레시피</button>
+                <button disabled={busy || creative.working || qualityLocked || pendingLut} onClick={() => { setMenuOpen(false); setRecipeOpen(true); }}>카메라 레시피</button>
                 {mode === 'camera' && (
                   <button
                     onClick={() => {
@@ -1560,7 +1571,7 @@ export default function App() {
         {mode === 'camera' ? (
           <button
             className="shutter"
-            disabled={!ready || busy || creative.working || creative.countdown !== null || pendingLut}
+            disabled={!ready || busy || creative.working || creative.countdown !== null || !renderReady}
             onClick={shoot}
             aria-label="촬영"
           >
@@ -1733,6 +1744,8 @@ framePreview={<StudioFramePreview sampleId={preview.sampleId} source={studioPrev
         variationControls={<FilmVariationControls settings={variation.settings} locked={busy || creative.working || creative.locked || pendingLut} warning={variation.warning} writable={variation.writable} notice={reprocessRecord ? `다른 패턴은 전체 컷에 적용해요. 고정하면 마지막 컷의 패턴을 전체 컷에 사용해요.${editPatterns?.at(-1) === null ? ' 마지막 컷에 패턴이 없으면 새 패턴으로 고정해요.' : ''}` : undefined} onChange={changeVariation} onReroll={rerollVariation} onFreeze={freezeVariation} onSaveRecipe={() => { setCreativeOpen(false); setRecipeOpen(true); }} onReset={() => { variation.resetStored(); if (reprocessRecord) { setEditPatterns(Array(reprocessRecord.originals.length).fill(null)); updateEditVariation(DEFAULT_VARIATION); } }} />}
         selectedFilm={lutId}
         variationSummary={{ mode: variation.settings.mode, warning: variation.warning, writable: variation.writable }}
+        filmQualitySummary={{ model: filmQuality.settings?.model ?? 'legacy', grain: look.filmQuality?.grain ?? 0, size: filmQuality.settings?.size ?? DEFAULT_FILM_QUALITY.size }}
+        filmQualityControls={<FilmQualityControls settings={filmQuality.settings} locked={busy || creative.working || qualityLocked || !renderReady} warning={filmQuality.warning} onChange={settings => { if (!settingsWriteLocked.current && renderReady) filmQuality.update(settings); }} />}
         onFilm={(id) => {
           if (id === 'none' && id !== lutId) preservePresetFx.current = true;
           selectFilm(id);
@@ -1753,6 +1766,7 @@ framePreview={<StudioFramePreview sampleId={preview.sampleId} source={studioPrev
         options={creativeOptions}
         originals={keepOriginal}
         locked={creative.locked || busy}
+        effectsLocked={qualityLocked || busy}
         gentleAvailable={gentleAvailable}
         ratioIdx={tiledMode ? captureRatioIdx : compositeRatioIdx}
         ratioLocked={creative.frames.length > 0 || creative.working}
@@ -1770,7 +1784,7 @@ framePreview={<StudioFramePreview sampleId={preview.sampleId} source={studioPrev
         onClearEffects={clearStudioEffects}
         onClose={() => setCreativeOpen(false)}
       />}
-      {recipeOpen && <RecipeSheet settings={generalSettings} onApply={applyCameraSettings} onClose={() => setRecipeOpen(false)} />}
+      {recipeOpen && <RecipeSheet settings={generalSettings} onApply={settings => applyCameraSettings(settings)} onClose={() => setRecipeOpen(false)} />}
       {settingsOverviewOpen && <SettingsOverview snapshot={settingsSnapshot} unavailable={unavailableSettings} onClose={closeSettingsOverview} onNavigate={navigateSettings} />}
       {creative.historyOpen && <PhotoHistory active={!comparisonSource} records={creative.records} warning={creative.warning} onClose={() => { comparisonEpoch.current++; creative.setHistoryOpen(false); }} onDelete={creative.remove} onReprocess={reprocessPhoto} onCompare={(record) => void openComparison(record)} />}
       {comparisonSource && <LutComparison source={comparisonSource} choices={comparisonChoices} selectedId={lutId} locked={busy || creative.working || creative.locked || pendingLut || preview.busy || !!preview.error} onApply={applyComparison} onClose={closeComparison}

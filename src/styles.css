@@ -103,6 +103,14 @@ body,
 .film-variation output { color: var(--camera-muted); min-width: 4ch; text-align: end; font-variant-numeric: tabular-nums; }
 .film-variation .camera-choices button { white-space: nowrap; }
 .film-variation .camera-note { text-wrap: pretty; }
+.film-quality-controls .film-range-label { display: flex; justify-content: space-between; gap: 16px; }
+.film-quality-controls output { color: var(--camera-muted); font-variant-numeric: tabular-nums; }
+.film-quality-controls input[type="range"] { min-height: 44px; }
+.film-size-presets { margin-top: 20px; }
+.film-size-presets > span { display: block; margin-bottom: 10px; font-size: 13px; }
+.film-quality-details { margin-top: 18px; }
+.film-quality-details > summary { min-height: 44px; padding-block: 12px; color: var(--camera-muted); cursor: pointer; font-size: 13px; }
+.film-quality-details > summary:focus-visible { outline: 2px solid var(--camera-accent); outline-offset: 2px; }
 .camera-dialog .camera-primary { width: 100%; background: var(--camera-accent); color: #100d20; font-weight: 650; margin-top: 16px; }
 .preview-selector { flex: none; padding: 4px 16px 10px; }
 .preview-selector > .preview-source-picker { max-height: min(36dvh, 320px); overflow-y: auto; scrollbar-color: var(--camera-muted) var(--camera-panel); }

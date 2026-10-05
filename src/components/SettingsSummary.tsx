@@ -46,6 +46,7 @@ export function SettingsSummary({ snapshot, compositeSize, covered, onOpen }: { 
     <div id={id} hidden={collapsed} className="settings-summary-body">
       <p>{filter}{snapshot.settings.lutId !== 'none' && <span> · {Math.round(snapshot.settings.intensity * 100)}%</span>}</p>
       <p className="settings-summary-meta">{snapshot.source === 'edit' ? '사진 편집' : CAPTURE_LABELS[snapshot.captureMode]} · {snapshot.ratioLabel}</p>
+      {snapshot.resolvedFilmQuality && <p className="settings-summary-meta">필름 질감 · 입자 {Math.round(snapshot.resolvedFilmQuality.grain * 100)}%</p>}
       <button onClick={onOpen}>전체 설정 보기<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="m9 5 7 7-7 7" /></svg></button>
     </div>
   </div>;

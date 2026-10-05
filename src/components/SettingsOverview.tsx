@@ -7,6 +7,7 @@ import { PAPERS } from '../capture/paper';
 import { DEFAULT_BEAUTY, DEFS as BEAUTY_DEFS } from './BeautyPanel';
 import { CameraDialog } from './CameraDialog';
 import { StudioDisclosure } from './StudioDisclosure';
+import { DEFAULT_FILM_QUALITY, type ResolvedFilmQuality } from '../engine/filmQuality';
 
 export type SettingsDestination = 'shooting' | 'templates' | 'effects' | 'filters' | 'adjust' | 'beauty' | 'date';
 export interface SettingsSnapshot {
@@ -29,6 +30,7 @@ export interface SettingsSnapshot {
   beautyAvailable: boolean;
   patternSeed: number | null;
   mixedPatterns: boolean;
+  resolvedFilmQuality?: ResolvedFilmQuality | null;
 }
 export const CAPTURE_LABELS: Record<CaptureMode, string> = { normal: '일반', instant: '즉석사진', half: '하프프레임', booth: '네 컷', double: '다중노출' };
 const percent = (value: number) => `${Math.round(value * 100)}%`;
@@ -52,6 +54,8 @@ export function SettingsOverview({ snapshot: s, unavailable, onClose, onNavigate
   </StudioDisclosure>;
   const patternLabel = v.mode === 'off' ? '꺼짐' : v.mode === 'fixed' ? '고정 패턴' : '매 컷 새롭게';
   const lensLabel = p.lens === 'none' ? '꺼짐' : p.lens === 'star' ? '빛줄기' : '가장자리 굴절';
+  const q = p.filmQuality ?? DEFAULT_FILM_QUALITY, activeQuality = s.resolvedFilmQuality;
+  const inactiveQuality = q.model === 'legacy' ? ' · 현재 미사용' : '';
   return <CameraDialog title="현재 설정" onClose={onClose} className="settings-overview-dialog">
     <div className="settings-overview-body">
       <p className="settings-overview-intro">{s.filterLabel} · {s.ratioLabel}<span>현재 설정을 확인하는 화면이에요. 변경은 각 설정에서 할 수 있어요.</span></p>
@@ -73,6 +77,14 @@ export function SettingsOverview({ snapshot: s, unavailable, onClose, onNavigate
         ['필터·추가 입자', p.grainOff ? '입자 꺼짐' : '필터·패턴 설정에 따라 적용'], ['은은한 질감', !p.gentle ? '꺼짐' : s.gentleAvailable ? '켜짐' : '켜짐 · 현재 필터 미지원'],
       ], 'filters', '필름 선택 열기', true)}
       {group('질감', `${lensLabel} · 패턴 ${patternLabel}`, [
+        ['필름 처리', q.model === 'film-v2' ? '새 필름 처리' : '기존 처리'],
+        ['유효 필름 입자', percent(activeQuality?.grain ?? 0)], ['유효 광원 번짐', percent(activeQuality?.glow ?? 0)],
+        ...(p.filmQuality || defaults ? [
+          ['필름 입자 저장값', `${percent(q.grain)}${inactiveQuality}`], ['입자 크기', `${percent(q.size)}${inactiveQuality}`],
+          ['컬러 입자', `${percent(q.color)}${inactiveQuality}`], ['암부 입자', `${percent(q.shadows)}${inactiveQuality}`],
+          ['광원 번짐 저장값', `${percent(q.glow)}${inactiveQuality}`], ['번짐 범위', `${percent(q.glowRadius)}${inactiveQuality}`],
+          ['필름 패턴 값', String(activeQuality?.seed ?? q.seed)],
+        ] as Row[] : []),
         ['렌즈 효과', lensLabel], ['렌즈 강도', `${percent(p.lensAmount)}${p.lens === 'none' ? ' · 현재 미사용' : ''}`], ['빈티지 패턴', patternLabel],
         ['추가 입자', `${percent(v.grain)}${p.grainOff ? ' · 입자 꺼짐' : v.mode === 'off' ? ' · 현재 미사용' : ''}`], ['빛샘', `${percent(v.leak)}${v.mode === 'off' ? ' · 현재 미사용' : ''}`],
         ['먼지', `${percent(v.dust)}${v.mode === 'off' ? ' · 현재 미사용' : ''}`], ['색 편차', `${percent(v.color)}${v.mode === 'off' ? ' · 현재 미사용' : ''}`],
