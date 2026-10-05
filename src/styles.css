@@ -21,6 +21,7 @@ body,
   --camera-control: #29292d;
   --camera-muted: #b8b8c1;
   --camera-accent: #8a7cff;
+  --camera-selected-ink: #a69cff;
   --safe-area-top: env(safe-area-inset-top, 0px);
   --safe-area-left: env(safe-area-inset-left, 0px);
   --safe-area-right: env(safe-area-inset-right, 0px);
@@ -87,7 +88,7 @@ body,
 .camera-dialog button { min-height: 44px; background: var(--camera-control); }
 .camera-dialog button:disabled { opacity: .45; cursor: default; }
 .camera-dialog button:focus-visible, .camera-dialog input:focus-visible, .camera-dialog select:focus-visible { outline: 2px solid var(--camera-accent); outline-offset: 3px; }
-.camera-dialog button[aria-pressed="true"] { color: var(--camera-accent); outline: 1px solid var(--camera-accent); outline-offset: -1px; }
+.camera-dialog button[aria-pressed="true"] { color: var(--camera-selected-ink); outline: 1px solid var(--camera-accent); outline-offset: -1px; }
 .camera-field { border: 0; display: block; margin: 24px 0 12px; min-width: 0; font-size: 14px; }
 .camera-field legend { margin-bottom: 10px; font-weight: 600; }
 .camera-choices, .camera-actions { display: flex; gap: 8px; flex-wrap: wrap; }

@@ -497,6 +497,7 @@ export class FilterPipeline {
   }
 
   render(params: FilterParams = DEFAULT_PARAMS, lutAmount = 0, opts: RenderOpts = {}) {
+    this.assertContextAvailable();
     if (!this.srcW) return;
     const gl = this.gl;
     const cw = this.canvas.width;
@@ -685,6 +686,11 @@ export class FilterPipeline {
     gl.uniform1f(u.u_eyeclear, this.beautyOn ? this.eyeclear : 0);
 
     gl.drawArrays(gl.TRIANGLES, 0, 3);
+    this.assertContextAvailable();
+  }
+
+  assertContextAvailable() {
+    if (this.gl.isContextLost()) throw new Error('사진 처리 장치가 잠시 중단됐어요. 복구 후 다시 시도해주세요.');
   }
 }
 
@@ -841,6 +847,7 @@ export async function renderFilteredCanvas(
     expPipe = new FilterPipeline(expCanvas);
   }
   const { w, h } = srcSize(src);
+  expPipe!.assertContextAvailable();
   const out = exportSize(w, h, ratio);
   expCanvas.width = out.w;
   expCanvas.height = out.h;

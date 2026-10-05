@@ -76,7 +76,7 @@ export function SettingsOverview({ snapshot: s, unavailable, onClose, onNavigate
         ['선택한 필름', s.filterLabel], ['필터 강도', `${percent(p.intensity)}${p.lutId === 'none' ? ' · 필름 없음일 때 미사용' : ''}`], ['강도 적용', p.strengthMode === 'color' ? '색상만' : '전체 룩'],
         ['필터·추가 입자', p.grainOff ? '입자 꺼짐' : '필터·패턴 설정에 따라 적용'], ['은은한 질감', !p.gentle ? '꺼짐' : s.gentleAvailable ? '켜짐' : '켜짐 · 현재 필터 미지원'],
       ], 'filters', '필름 선택 열기', true)}
-      {group('질감', `${lensLabel} · 패턴 ${patternLabel}`, [
+      {group('질감', `${q.model === 'film-v2' ? `입자 ${percent(activeQuality?.grain ?? 0)} · 번짐 ${percent(activeQuality?.glow ?? 0)}` : '기존 처리'} · 렌즈 ${lensLabel} · 패턴 ${patternLabel}`, [
         ['필름 처리', q.model === 'film-v2' ? '새 필름 처리' : '기존 처리'],
         ['유효 필름 입자', percent(activeQuality?.grain ?? 0)], ['유효 광원 번짐', percent(activeQuality?.glow ?? 0)],
         ...(p.filmQuality || defaults ? [

@@ -41,7 +41,7 @@ import {
 } from './beauty/face';
 import { saveImage } from './utils/share';
 import { renderStampRed, renderStampSoft, stampFontReady } from './engine/datestamp';
-import { deriveFx, type RenderLook } from './engine/look';
+import { nonColorSource as sourceForNonColor, presetEffects, type RenderLook } from './engine/look';
 import { useCreativeCapture } from './capture/useCreativeCapture';
 import { canvasBlob, composeFrames, snapshotFrame } from './capture/composite';
 import type { CameraSettings, CapturedFrame, CaptureRecord, StampStyle } from './capture/types';
@@ -172,6 +172,7 @@ export default function App() {
   const [capturePreviewSize, setCapturePreviewSize] = useState<PreviewSize>('small');
   const [recipeOpen, setRecipeOpen] = useState(false);
   const [creativeOptions, setCreativeOptions] = useState(DEFAULT_CREATIVE);
+  const [nonColorSource, setNonColorSource] = useState<CameraSettings['nonColorSource']>();
   const [keepOriginal, setKeepOriginal] = useState(() => localStorage.getItem('oc-keep-original') === '1');
   const [dateStyle, setDateStyle] = useState<StampStyle>(() => localStorage.getItem('oc-datestyle') === 'red' ? 'red' : 'amber');
   const [reprocessRecord, setReprocessRecord] = useState<CaptureRecord | null>(null);
@@ -183,13 +184,19 @@ export default function App() {
   const qualityLocked = creative.locked || (creative.mode === 'half' && creative.frames.length > 0);
   const settingsWriteLocked = useRef(false);
   settingsWriteLocked.current = busy || creative.working || qualityLocked;
+  const captureSettingsLocked = useRef(false); captureSettingsLocked.current = creative.working || qualityLocked;
+  const selectionState = useRef({ blocked: false, qualityLocked, quality: filmQuality.settings });
+  selectionState.current = { blocked: busy || creative.working || creative.locked, qualityLocked, quality: filmQuality.settings };
   const tiledMode = creative.mode === 'half' || creative.mode === 'booth' || creative.mode === 'instant';
   const captureRatioIdx = creative.mode !== 'normal' && creative.frames.length ? creative.frames[0].settings.ratioIdx : creative.mode === 'instant' ? creative.options.instantFormat === 'portrait' ? 2 : 0 : tiledMode ? compositeRatioIdx : ratioIdx;
   const ratio = RATIOS[captureRatioIdx];
   const cameraActive = mode === 'camera' && !creative.review && !creative.historyOpen;
-  const generalSettings: CameraSettings = { lutId, intensity: lutIntensity, params: { ...params }, beauty: { ...beauty }, ratioIdx, grainOff, variation: { ...variation.settings }, ...(filmQuality.settings ? { filmQuality: filmQuality.settings } : {}), ...creativeOptions, date: { mode: dateMode, fmt: dateFmt, size: dateSize, orient: dateOrient, style: dateStyle } };
-  const qualityKey = JSON.stringify(filmQuality.settings ?? null);
-  const gentleAvailable = filmQuality.settings?.model !== 'film-v2' && PRESETS.find((p) => p.id === lutId)?.group !== '디지캠' && !!PRESETS.find((p) => p.id === lutId)?.fx;
+  const generalSettings: CameraSettings = { lutId, intensity: lutIntensity, params: { ...params }, beauty: { ...beauty }, ratioIdx, grainOff, variation: { ...variation.settings }, ...(filmQuality.settings ? { filmQuality: filmQuality.settings } : {}), ...(nonColorSource ? { nonColorSource } : {}), ...creativeOptions, date: { mode: dateMode, fmt: dateFmt, size: dateSize, orient: dateOrient, style: dateStyle } };
+  const currentSettings = useRef(generalSettings); currentSettings.current = generalSettings;
+  const qualityKey = JSON.stringify([filmQuality.settings ?? null, nonColorSource ?? null]);
+  const textureSource = sourceForNonColor(generalSettings);
+  const texturePreset = PRESETS.find(p => p.id === textureSource.presetId);
+  const gentleAvailable = filmQuality.settings?.model !== 'film-v2' && texturePreset?.group !== '디지캠' && !!texturePreset?.fx;
   const look: RenderLook = { lens: creativeOptions.lens, lensAmount: creativeOptions.lensAmount, gentle: creativeOptions.gentle && gentleAvailable };
   const lookRef = useRef(look); lookRef.current = look;
   const recipeApplying = useRef(false);
@@ -507,14 +514,11 @@ export default function App() {
   useEffect(() => {
     if (!lutReady) return;
     const lut = lutId === 'none' ? null : (loadedLuts[lutId] ?? null);
-    const preset = lutId === 'none' ? null : PRESETS.find((p) => p.id === lutId);
     setApplied({
       key: `preset-${lutId}`,
       lut,
       amount: lutId === 'none' ? 0 : lutIntensity,
-      fx: deriveFx(preset?.fx
-        ? { ...preset.fx, grain: grainOff ? 0 : preset.fx.grain, seed: fxSeedRef.current }
-        : null, lutIntensity, creativeOptions.strengthMode, look.gentle),
+      fx: presetEffects(currentSettings.current, fxSeedRef.current),
       qualityKey,
     });
   }, [lutId, lutReady, loadedLuts, lutIntensity, grainOff, creativeOptions.strengthMode, look.gentle, studioEffectsRevision, qualityKey]);
@@ -524,7 +528,7 @@ export default function App() {
   const renderReadyRef = useRef(renderReady); renderReadyRef.current = renderReady;
   const previewPattern = mode === 'edit' && editPatterns ? editPatterns.at(-1) ?? null : variation.pattern;
   const resolvedPreview = useMemo(() => resolveVariation(params, applied.fx, previewPattern ? variation.settings : DEFAULT_VARIATION, previewPattern, grainOff), [params, applied.fx, variation.settings, previewPattern, grainOff]);
-  look.filmQuality = useMemo(() => resolveFilmQuality(filmQuality.settings, { params: resolvedPreview.params, fx: resolvedPreview.fx, intensity: lutIntensity, strengthMode: creativeOptions.strengthMode, grainOff, pattern: previewPattern }), [filmQuality.settings, resolvedPreview, lutIntensity, creativeOptions.strengthMode, grainOff, previewPattern]);
+  look.filmQuality = useMemo(() => resolveFilmQuality(filmQuality.settings, { params: resolvedPreview.params, fx: resolvedPreview.fx, intensity: textureSource.intensity, strengthMode: creativeOptions.strengthMode, grainOff, pattern: previewPattern }), [filmQuality.settings, resolvedPreview, textureSource.intensity, creativeOptions.strengthMode, grainOff, previewPattern]);
 
   const paramsRef = useRef(resolvedPreview.params);
   paramsRef.current = resolvedPreview.params;
@@ -703,6 +707,10 @@ export default function App() {
   ], [customs, presets, lutId]);
   const previewOptions = useMemo(() => ({ sampleId: preview.sourceKind === 'sample' ? preview.sampleId : undefined,
     source: preview.thumbnailSource, sourceVersion: preview.sourceKey, srcKey: preview.sourceKey, filmQuality: filmQuality.settings }), [preview.sourceKind, preview.sampleId, preview.thumbnailSource, preview.sourceKey, filmQuality.settings]);
+  // Every Studio exit and settings/source transition invalidates pending work,
+  // including footer Cancel/Clear and navigation paths that bypass onClose.
+  const textureRequestKey = JSON.stringify(generalSettings);
+  useEffect(() => { textureEpoch.current++; setTextureLoading(false); setTextureError(null); }, [creativeOpen, textureRequestKey, preview.sourceKey]);
   const openTextureComparison = async () => {
     if (settingsWriteLocked.current || !renderReady || textureLoading) return;
     const token = ++textureEpoch.current; textureFocus.current = document.activeElement as HTMLElement | null;
@@ -758,16 +766,28 @@ export default function App() {
     if (qualityLocked && signatureFilm(choice.id) && !filmQuality.settings) return;
     if (choice.id !== lutId) comparisonApplying.current = true;
     if (signatureFilm(choice.id) && !filmQuality.settings) filmQuality.update({ ...DEFAULT_FILM_QUALITY });
+    else if (filmQuality.settings?.origin === 'profile') filmQuality.update({ ...filmQuality.settings, origin: 'manual', profile: undefined });
+    setNonColorSource(sourceForNonColor(generalSettings));
     setLutId(choice.id); setLutIntensity(choice.amount); closeComparison();
   };
   const selectFilm = useCallback((id: string) => {
-    if (busy || creative.working || creative.locked) return;
-    if (qualityLocked && (signatureFilm(id) || filmQuality.settings?.origin === 'profile')) return;
+    const state = selectionState.current;
+    if (state.blocked) return false;
+    if (state.qualityLocked && (signatureFilm(id) || state.quality?.origin === 'profile')) return false;
     if (signatureFilm(id)) {
-      if (filmQuality.settings?.origin !== 'manual') filmQuality.update(createSignatureQuality(id, filmQuality.settings?.seed ?? .5));
-    } else if (filmQuality.settings?.origin === 'profile') filmQuality.update(undefined);
+      if (state.quality?.origin !== 'manual') filmQuality.update(createSignatureQuality(id, state.quality?.seed ?? .5));
+    } else if (state.quality?.origin === 'profile') filmQuality.update(undefined);
+    setNonColorSource(state.qualityLocked && state.quality?.model === 'film-v2' ? sourceForNonColor(currentSettings.current) : undefined);
     setLutId(id);
-  }, [busy, creative.working, creative.locked, qualityLocked, filmQuality.settings, filmQuality.update]);
+    return true;
+  }, [filmQuality.update]);
+  const changeIntensity = (amount: number) => {
+    if (captureSettingsLocked.current && selectionState.current.quality?.model === 'film-v2') setNonColorSource(sourceForNonColor(currentSettings.current));
+    setLutIntensity(amount);
+  };
+  const changeParams = (next: FilterParams) => {
+    setParams(previous => captureSettingsLocked.current && selectionState.current.quality?.model === 'film-v2' ? { ...next, grain: previous.grain } : next);
+  };
 
   const confirmEditEntry = useCallback(() => !creative.frames.length || window.confirm('진행 중인 촬영을 버리고 사진 편집을 시작할까요?'), [creative.frames.length]);
   const openImage = useCallback(async (f: File) => {
@@ -801,6 +821,7 @@ export default function App() {
     recipeApplying.current = s.lutId !== lutId;
     setLutId(s.lutId); setLutIntensity(s.intensity); setParams(s.params); setBeauty(s.beauty); setGrainOff(s.grainOff); setRatioIdx(s.ratioIdx);
     filmQuality.update(s.filmQuality);
+    setNonColorSource(s.nonColorSource);
     setCreativeOptions({ strengthMode: s.strengthMode, gentle: s.gentle, lens: s.lens, lensAmount: s.lensAmount });
     setDateMode(s.date.mode); setDateFmt(s.date.fmt); setDateSize(s.date.size); setDateOrient(s.date.orient); setDateStyle(s.date.style);
     if (restoredPatterns) variation.apply(validateVariation(s.variation), [...restoredPatterns].reverse().find(p => p !== null) ?? null);
@@ -812,7 +833,7 @@ export default function App() {
   };
 
   const changeVariation = (preferences: typeof variation.settings) => {
-    if (busy || creative.working || creative.locked) return;
+    if (settingsWriteLocked.current) return;
     if (reprocessRecord) updateEditVariation(preferences);
     if (reprocessRecord && (preferences.mode === 'off' || preferences.mode !== variation.settings.mode || preferences.fixedSeed !== variation.settings.fixedSeed || !editPatterns)) {
       const patterns = makeFramePatterns(preferences, reprocessRecord.originals.length, editPatterns);
@@ -820,7 +841,7 @@ export default function App() {
     } else variation.update(preferences);
   };
   const rerollVariation = () => {
-    if (busy || creative.working || creative.locked) return;
+    if (settingsWriteLocked.current) return;
     if (!reprocessRecord) { variation.reroll(); return; }
     const seed = nextPattern(editPatterns?.at(-1) ?? variation.pattern).seed;
     const preferences = { ...variation.settings, mode: variation.settings.mode === 'off' ? 'new' as const : variation.settings.mode, ...(variation.settings.mode === 'fixed' ? { fixedSeed: seed } : {}) };
@@ -828,7 +849,7 @@ export default function App() {
     setEditPatterns(patterns); updateEditVariation(preferences); variation.apply(preferences, patterns.at(-1) ?? null);
   };
   const freezeVariation = () => {
-    if (busy || creative.working || creative.locked) return;
+    if (settingsWriteLocked.current) return;
     if (!reprocessRecord) { variation.freeze(); return; }
     const pattern = editPatterns ? editPatterns.at(-1) ?? nextPattern(variation.pattern) : variation.pattern ?? nextPattern();
     const preferences = { ...variation.settings, mode: 'fixed' as const, fixedSeed: pattern.seed };
@@ -853,7 +874,7 @@ export default function App() {
     const source = record.mode === 'normal' ? sources[0] : composeFrames(sources, record.mode, record.composition ?? {});
     if (record.settings) {
       try { await applyCameraSettings({ ...record.settings, variation: restoredVariation, beauty: { ...DEFAULT_BEAUTY } }, restoredPatterns, true); }
-      catch (error) { if (error instanceof FilmQualityError) { for (const canvas of sources) canvas.width = canvas.height = 0; throw error; } setLutId('none'); filmQuality.update(undefined); setParams(DEFAULT_PARAMS); setBeauty(DEFAULT_BEAUTY); setCreativeOptions(DEFAULT_CREATIVE); variation.apply(DEFAULT_VARIATION); showToast('촬영 필터가 없어 원본에서 시작합니다'); }
+      catch (error) { if (error instanceof FilmQualityError) { for (const canvas of sources) canvas.width = canvas.height = 0; throw error; } setLutId('none'); filmQuality.update(undefined); setNonColorSource(undefined); setParams(DEFAULT_PARAMS); setBeauty(DEFAULT_BEAUTY); setCreativeOptions(DEFAULT_CREATIVE); variation.apply(DEFAULT_VARIATION); showToast('촬영 필터가 없어 원본에서 시작합니다'); }
     }
     if (!record.settings) variation.apply(restoredVariation, restoredPatterns ? [...restoredPatterns].reverse().find(p => p !== null) ?? null : null);
     setEditPatterns(restoredPatterns);
@@ -867,12 +888,12 @@ export default function App() {
     setFlash((f) => f + 1);
     const s = structuredClone(creative.mode === 'booth' && creative.frames.length ? creative.frames[0].settings : generalSettings);
     s.ratioIdx = captureRatioIdx;
-    const activeGentle = s.gentle && s.filmQuality?.model !== 'film-v2' && PRESETS.find((p) => p.id === s.lutId)?.group !== '디지캠';
-    const baseFx = deriveFx(PRESETS.find((p) => p.id === s.lutId)?.fx ? { ...PRESETS.find((p) => p.id === s.lutId)!.fx, grain: s.grainOff ? 0 : PRESETS.find((p) => p.id === s.lutId)!.fx?.grain, seed: fxSeedRef.current } : null, s.intensity, s.strengthMode, activeGentle);
+    const activeGentle = s.gentle && s.filmQuality?.model !== 'film-v2' && PRESETS.find((p) => p.id === sourceForNonColor(s).presetId)?.group !== '디지캠';
+    const baseFx = presetEffects(s, fxSeedRef.current);
     const preferences = validateVariation(s.variation);
     const pattern = preferences.mode === 'off' ? null : preferences.mode === 'fixed' ? { version: 1 as const, seed: preferences.fixedSeed } : variation.pattern ?? nextPattern();
     const resolved = resolveVariation(s.params, baseFx, preferences, pattern, s.grainOff);
-    const quality = resolveFilmQuality(s.filmQuality, { params: resolved.params, fx: resolved.fx, intensity: s.intensity, strengthMode: s.strengthMode, grainOff: s.grainOff, pattern });
+    const quality = resolveFilmQuality(s.filmQuality, { params: resolved.params, fx: resolved.fx, intensity: sourceForNonColor(s).intensity, strengthMode: s.strengthMode, grainOff: s.grainOff, pattern });
     if (quality && s.filmQuality) s.filmQuality = { ...s.filmQuality, seed: quality.seed };
     const fx = resolved.fx;
     const frozen = snapshotFrame(v, null, false, 2048);
@@ -898,7 +919,7 @@ export default function App() {
       const settings = structuredClone(generalSettings);
       const pattern = variation.pattern;
       const resolved = resolveVariation(settings.params, applied.fx, variation.settings, pattern, grainOff);
-      const quality = resolveFilmQuality(settings.filmQuality, { params: resolved.params, fx: resolved.fx, intensity: settings.intensity, strengthMode: settings.strengthMode, grainOff, pattern });
+      const quality = resolveFilmQuality(settings.filmQuality, { params: resolved.params, fx: resolved.fx, intensity: sourceForNonColor(settings).intensity, strengthMode: settings.strengthMode, grainOff, pattern });
       if (quality && settings.filmQuality) settings.filmQuality = { ...settings.filmQuality, seed: quality.seed };
       const frozen = keepOriginal || pattern ? snapshotFrame(v, null, false) : v;
       const original = keepOriginal ? snapshotFrame(frozen, ratio, facing === 'user') : null;
@@ -1033,22 +1054,23 @@ export default function App() {
       }
       if (!ok) return;
       setCustoms(listCustomLuts());
-      if (last) {
-        setLutId(last.id);
+      const appliedImport = !!last && !settingsWriteLocked.current && selectFilm(last.id);
+      if (appliedImport) {
         setPanel('filters');
       }
-      showToast(ok > 1 ? `LUT ${ok}개 추가됨` : 'LUT 적용됨');
+      showToast(appliedImport ? ok > 1 ? `LUT ${ok}개 추가됨` : 'LUT 적용됨' : 'LUT 추가됨 · 촬영 설정 유지');
     },
-    [showToast],
+    [showToast, selectFilm],
   );
 
   const bakeCustomLut = useCallback(async () => {
-    if (busy) return;
+    if (settingsWriteLocked.current) return;
     if (lutId !== 'none' && !loadedLuts[lutId]) {
       setGlError('필터 로딩이 완료된 후 LUT를 만들어주세요');
       return;
     }
     setBusy(true);
+    const settingsAtStart = structuredClone(currentSettings.current);
     try {
       const N = 64;
       const S = 512;
@@ -1087,7 +1109,7 @@ export default function App() {
       setLoadedLuts((m) => ({ ...m, [entry.id]: lut }));
       setCustoms(listCustomLuts());
       const latest = editSettingsRef.current;
-      if (latest.params !== params || latest.lutId !== lutId || latest.lutIntensity !== lutIntensity) {
+      if (captureSettingsLocked.current || latest.params !== params || latest.lutId !== lutId || latest.lutIntensity !== lutIntensity || JSON.stringify(currentSettings.current) !== JSON.stringify(settingsAtStart)) {
         showToast('커스텀 LUT로 저장됨 · 변경된 설정 유지');
         return;
       }
@@ -1098,6 +1120,9 @@ export default function App() {
         vignette: p.vignette, grain: p.grain,
       }));
       setLutIntensity(1);
+      comparisonApplying.current = true;
+      setNonColorSource(sourceForNonColor(settingsAtStart));
+      if (settingsAtStart.filmQuality?.origin === 'profile') filmQuality.update({ ...settingsAtStart.filmQuality, origin: 'manual', profile: undefined });
       setApplied({ key: `preset-${entry.id}`, lut, amount: 1, fx: null, qualityKey });
       setLutId(entry.id);
       setPanel('filters');
@@ -1107,7 +1132,7 @@ export default function App() {
     } finally {
       setBusy(false);
     }
-  }, [busy, lutId, loadedLuts, params, lutIntensity, customs.length, showToast, qualityKey]);
+  }, [lutId, loadedLuts, params, lutIntensity, customs.length, showToast, qualityKey, filmQuality.update]);
 
   useEffect(() => {
     localStorage.setItem('oc-grid', gridOn ? '1' : '0');
@@ -1218,6 +1243,7 @@ export default function App() {
     setStudioEffectsRevision(value => value + 1);
     setLutId(s.lutId); setLutIntensity(s.intensity); setGrainOff(s.grainOff);
     filmQuality.update(s.filmQuality);
+    setNonColorSource(s.nonColorSource);
     setCreativeOptions({ strengthMode: s.strengthMode, gentle: s.gentle, lens: s.lens, lensAmount: s.lensAmount });
     variation.apply(validateVariation(s.variation), entry.pattern);
     if (entry.recordId && reprocessRecord?.id === entry.recordId) {
@@ -1230,6 +1256,7 @@ export default function App() {
     if (settingsWriteLocked.current) return;
     setLutId('none'); setLutIntensity(1); setGrainOff(false); setCreativeOptions({ ...DEFAULT_CREATIVE });
     filmQuality.update(undefined);
+    setNonColorSource(undefined);
     changeVariation({ ...variation.settings, mode: 'off' });
   };
   const openSettingsOverview = () => {
@@ -1466,15 +1493,16 @@ export default function App() {
         )}
         {!compare &&
           imgRect &&
-          (PRESETS.find((p) => p.id === lutId)?.fx?.grain ?? 0) > 0 && (
+          (texturePreset?.fx?.grain ?? 0) > 0 && (
             <button
               className={`grain-chip${grainOff ? ' off' : ''}`}
+              disabled={qualityLocked && filmQuality.settings?.model === 'film-v2'}
               style={{
                 left: imgRect.left + imgRect.w * 0.04,
                 top: imgRect.top + imgRect.h * 0.03,
               }}
               onPointerDown={(e) => e.stopPropagation()}
-              onClick={() => setGrainOff((g) => !g)}
+              onClick={() => { if (captureSettingsLocked.current && selectionState.current.quality?.model === 'film-v2') return; setGrainOff((g) => !g); }}
             >
               그레인
             </button>
@@ -1558,20 +1586,21 @@ export default function App() {
           srcKey={mode === 'edit' && editSrc ? `e${editToken}` : 'smp'}
           preferSrc={mode === 'edit'}
           intensity={lutIntensity}
-          onIntensity={setLutIntensity}
+          onIntensity={changeIntensity}
           previewOptions={previewOptions}
         />
       ) : (
         <AdjustPanel
           params={params}
-          onChange={setParams}
+          onChange={changeParams}
           intensity={lutIntensity}
-          onIntensity={setLutIntensity}
+          onIntensity={changeIntensity}
           onReset={() => {
-            setParams(DEFAULT_PARAMS);
-            setLutIntensity(1);
+            changeParams(DEFAULT_PARAMS);
+            changeIntensity(1);
           }}
           lutEnabled={lutId !== 'none'}
+          textureLocked={qualityLocked && filmQuality.settings?.model === 'film-v2'}
         />
       )}
       </div>
@@ -1769,7 +1798,7 @@ export default function App() {
         onBoothInterval={creative.changeBoothInterval}
         onComposition={creative.setOptions}
 framePreview={<StudioFramePreview sampleId={preview.sampleId} source={studioPreviewSource} frames={creative.mode === 'booth' || creative.mode === 'instant' ? creative.frames : []} options={creative.options} mode={creative.mode === 'instant' ? 'instant' : 'booth'} ratio={RATIOS[tiledMode ? captureRatioIdx : compositeRatioIdx]!} params={resolvedPreview.params} lut={applied.lut} lutKey={applied.key} amount={applied.amount} fx={resolvedPreview.fx} look={look} ready={renderReady} inputs={studioCaptureInputs} date={{ on: showDate, fmt: dateFmt, size: dateSize, orient: dateOrient, style: dateStyle, timestamp: creative.frames.at(-1)?.createdAt ?? studioOpenedAt }} />}
-        variationControls={<FilmVariationControls settings={variation.settings} locked={busy || creative.working || creative.locked || pendingLut} warning={variation.warning} writable={variation.writable} notice={reprocessRecord ? `다른 패턴은 전체 컷에 적용해요. 고정하면 마지막 컷의 패턴을 전체 컷에 사용해요.${editPatterns?.at(-1) === null ? ' 마지막 컷에 패턴이 없으면 새 패턴으로 고정해요.' : ''}` : undefined} onChange={changeVariation} onReroll={rerollVariation} onFreeze={freezeVariation} onSaveRecipe={() => { setCreativeOpen(false); setRecipeOpen(true); }} onReset={() => { variation.resetStored(); if (reprocessRecord) { setEditPatterns(Array(reprocessRecord.originals.length).fill(null)); updateEditVariation(DEFAULT_VARIATION); } }} />}
+        variationControls={<FilmVariationControls settings={variation.settings} locked={busy || creative.working || qualityLocked || pendingLut} warning={variation.warning} writable={variation.writable} notice={reprocessRecord ? `다른 패턴은 전체 컷에 적용해요. 고정하면 마지막 컷의 패턴을 전체 컷에 사용해요.${editPatterns?.at(-1) === null ? ' 마지막 컷에 패턴이 없으면 새 패턴으로 고정해요.' : ''}` : undefined} onChange={changeVariation} onReroll={rerollVariation} onFreeze={freezeVariation} onSaveRecipe={() => { if (settingsWriteLocked.current) return; setCreativeOpen(false); setRecipeOpen(true); }} onReset={() => { if (settingsWriteLocked.current) return; variation.resetStored(); if (reprocessRecord) { setEditPatterns(Array(reprocessRecord.originals.length).fill(null)); updateEditVariation(DEFAULT_VARIATION); } }} />}
         selectedFilm={lutId}
         variationSummary={{ mode: variation.settings.mode, warning: variation.warning, writable: variation.writable }}
         filmQualitySummary={{ model: filmQuality.settings?.model ?? 'legacy', grain: look.filmQuality?.grain ?? 0, size: filmQuality.settings?.size ?? DEFAULT_FILM_QUALITY.size }}
@@ -1806,7 +1835,7 @@ framePreview={<StudioFramePreview sampleId={preview.sampleId} source={studioPrev
           if (mode === 'edit') { setReprocessRecord(null); setMode('camera'); }
           cancelCountdown();
         }}
-        onOptions={setCreativeOptions}
+        onOptions={options => { if (captureSettingsLocked.current && options.strengthMode !== currentSettings.current.strengthMode) return; setCreativeOptions(options); }}
         onOriginals={setKeepOriginal}
         onCancelEffects={cancelStudioEffects}
         onClearEffects={clearStudioEffects}

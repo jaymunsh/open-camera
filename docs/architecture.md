@@ -299,4 +299,8 @@ WebGL2 컨텍스트 위에 단일 풀스크린 삼각형 드로우로 모든 처
 - 촬영·재현상·편집 저장은 quality snapshot/effective seed를 보관한다. signature의 누락/손상 메타데이터는 missing-custom-LUT fallback과 다르게 원본·기록을 유지하고 거절한다.
 - `preview/filmTextureCompare.ts`는 동일 동결 원본의 색감·보정을 유지한 before/after를 순차 렌더한다. FX·뷰티·렌즈·날짜·추가 우연성은 제외하고 after에 새 모델만 적용한다. source/output은 작업별 소유하고 취소/해제 시 정리한다.
 - 스튜디오와 비교는 동시에 키보드 포커스/Escape를 소유하지 않는다. 썸네일 캐시 키에는 품질 모델·수치·시드·프로필 버전이 포함된다.
+- 색감만 적용한 상태는 선택적 `nonColorSource: { version: 1, presetId, intensity }`로 직전 필름의 비색상 효과·질감 강도를 보관한다. live/capture/recipe/reprocess는 같은 `presetEffects`와 강도 기준을 사용하므로 CCD·자동 날짜·새 입자/번짐이 색감 강도에 따라 바뀌지 않는다. 일반 필름 선택은 보관값을 해제한다. LUT 만들기는 색만 bake하고 남은 질감을 manual로 유지한다.
+- 비교 원본을 준비하는 동안 모든 Studio 종료·설정 변경·소스 변경은 요청 epoch를 무효화한다. 취소/효과 해제 후 오래된 비교창이 나타나지 않는다. LUT 가져오기는 자산 저장과 적용을 구분하고 비동기 완료 시 현재 촬영 잠금을 다시 검사한다.
+- 하프 첫 컷 이후 우연성·강도 적용 모드·새 모델에 합산되는 수동 입자/입자 꺼짐을 잠근다. 색상 선택·색 강도는 유지하되 새 질감 기준을 고정한다. 자동 매 컷 시드 진행은 기존대로다.
+- GPU context loss 중 렌더 및 공유 출력 복사를 거절하며, 복구 후 같은 모델로 재시도할 수 있다. 빈 출력은 저장/비교 성공으로 처리하지 않는다.
 - [검증 결과와 한계](signature-film-quality-verification.md), [후보 평가 상태](signature-film-evaluation.md)를 별도로 기록한다. 후속 인물·내 카메라·사진 스튜디오·필름롤은 별도 단계다.

@@ -9,6 +9,7 @@ interface Props {
   onIntensity: (v: number) => void;
   onReset: () => void;
   lutEnabled: boolean;
+  textureLocked?: boolean;
 }
 
 const ICONS: Record<string, ReactNode> = {
@@ -151,7 +152,7 @@ interface Item {
   step: number;
 }
 
-export function AdjustPanel({ params, onChange, intensity, onIntensity, onReset, lutEnabled }: Props) {
+export function AdjustPanel({ params, onChange, intensity, onIntensity, onReset, lutEnabled, textureLocked = false }: Props) {
   const items: Item[] = [
     ...(lutEnabled ? [{ key: 'intensity', label: '강도', min: 0, max: 1, step: 0.01 }] : []),
     ...PARAM_DEFS.map((d: ParamDef) => ({ key: d.key, label: d.label, min: d.min, max: d.max, step: d.step })),
@@ -160,6 +161,7 @@ export function AdjustPanel({ params, onChange, intensity, onIntensity, onReset,
   const cur = items.find((i) => i.key === sel) ?? items[0];
   const val = cur.key === 'intensity' ? intensity : params[cur.key as keyof FilterParams];
   const setVal = (v: number) => {
+    if (textureLocked && cur.key === 'grain') return;
     if (cur.key === 'intensity') onIntensity(v);
     else onChange({ ...params, [cur.key]: v });
   };
@@ -206,12 +208,13 @@ export function AdjustPanel({ params, onChange, intensity, onIntensity, onReset,
           max={cur.max}
           step={cur.step}
           value={val}
+          disabled={textureLocked && cur.key === 'grain'}
           style={{ '--track': track } as CSSProperties}
           onChange={(e) => setVal(parseFloat(e.target.value))}
           onDoubleClick={() => setVal(cur.key === 'intensity' ? 1 : 0)}
         />
         <span className="adj-val">{val.toFixed(2)}</span>
-        <button className="reset" onClick={() => setVal(cur.key === 'intensity' ? 1 : 0)}>
+        <button className="reset" disabled={textureLocked && cur.key === 'grain'} onClick={() => setVal(cur.key === 'intensity' ? 1 : 0)}>
           초기화
         </button>
       </div>

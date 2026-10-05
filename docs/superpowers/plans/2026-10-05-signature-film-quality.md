@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-05-signature-film-quality-design.md`
 
-**Status:** 2026-10-05 사용자 진행 승인, Native 방식으로 Task 1–7 구현 및 단계별 검증을 진행했다. 최종 전체 회귀 검증·코드/UI 리뷰 진행 중. [구현/검증 기록](../../signature-film-quality-verification.md)을 기준으로 상태를 확인한다. 아래 체크리스트는 원 계획의 실행 계약이며 단계별 완료 근거는 실행 ledger와 커밋에 기록한다.
+**Status:** 2026-10-05 Native 방식으로 Task 1–7 구현·단계별 검증과 최종 수정 완료. 최종 전체 294개 및 추가 손상 테스트 1개, typecheck/build 통과. UI 수정 재검토 완료; 실제 사진·iPhone 실기기는 미확인이다. [구현/검증 기록](../../signature-film-quality-verification.md)과 [결정 기록](../../signature-film-quality-decisions.md)을 기준으로 확인한다. 아래 체크리스트는 원 계획의 실행 계약을 보존한 것이며 완료 근거는 검증 기록과 커밋에 남긴다. 기존 뷰티 유지 의견에 따라 1B 추가 보정은 보류하며 2/3A/3B는 후속 상세 설계 대상이다.
 
 ## Global Constraints
 

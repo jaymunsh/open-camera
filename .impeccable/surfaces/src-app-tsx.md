@@ -118,3 +118,34 @@ values from effective amounts. First-cut locks apply to every writer. Signature:
 switch texture on/off on the same photo without changing LUT, date or beauty.
 No visual-world seed, comp or new raster assets apply; four viewport verification
 and fresh finish review/documentation remain required.
+
+2026-10-05 signature-film-quality implementation evidence:
+
+- `src/styles.css` retains black, panel `#18181a`, control `#29292d`, muted
+  `#b8b8c1`, accent `#8a7cff` and the incumbent Korean system-font stack. Shared
+  pressed dialog text now uses `--camera-selected-ink: #a69cff`; the accent still
+  supplies outlines, range controls and primary fills. This is a legibility
+  refinement within the incumbent violet palette.
+- The new controls reuse 14px field legends, 13px range labels, 12px notes,
+  tabular numeric outputs, wrapping 8px-gap choices and 44px interaction heights.
+  Film Texture starts collapsed; existing/new processing, three size presets,
+  grain/glow ranges and optional detailed ranges use the established field and
+  disclosure components (`FilmQualityControls.tsx`, `CreativeSettings.tsx`).
+- `FilmTextureComparison.tsx` reuses `CameraDialog`, its focus trap, Escape and
+  focus return, plus the comparison scroll body. Texture canvases use contained
+  image sizing with a block wrapper; before/after/paired and 1×/2× are view-only.
+  The dialog states the 1024px limit and excluded effects and has no Apply action.
+  The Studio effect off/cancel footer remains outside the scrollable body.
+- `SettingsOverview.tsx` reads resolved grain/glow in its collapsed texture
+  summary and labels legacy stored values as currently unused in the expanded
+  rows. The supplied final finish review reports ship after the corrected four
+  viewport sets (controls, overview, result and texture; 16 screenshots), with
+  selected-text contrast 6.086:1 on the control surface and no visible fix
+  regressions. This documentation pass inspected source, not a live browser.
+- Verification limits remain explicit: at documentation review the suite was
+  running; root subsequently verified 294 passed plus one additional metadata
+  test, typecheck and build. Synthetic camera/sample images do not establish
+  real photographic quality, and the six signature candidates remain unverified.
+  Missing `PRODUCT.md` and `DESIGN.md` are incumbent documentation drift excluded
+  from this ordinary extension; neither is created or canonized as a requirement
+  to repair during this pass.

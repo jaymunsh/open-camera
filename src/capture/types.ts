@@ -19,6 +19,8 @@ export interface CameraSettings {
   grainOff: boolean;
   variation?: VariationSettings;
   filmQuality?: FilmQualitySettings;
+  /** Color-only A/B keeps the preceding preset's non-color effects and strength. */
+  nonColorSource?: { version: 1; presetId: string; intensity: number };
   strengthMode: 'color' | 'whole';
   gentle: boolean;
   lens: LensMode;

@@ -2,6 +2,7 @@ import { DEFAULT_BEAUTY } from '../components/BeautyPanel';
 import { PARAM_DEFS } from '../engine/types';
 import { validateVariation } from '../engine/variation';
 import { assertFilmQualityForPreset } from '../engine/filmQuality';
+import { PRESETS } from '../engine/lut';
 import type { CameraSettings } from './types';
 
 export interface Recipe { version: 1; id: string; name: string; settings: CameraSettings }
@@ -19,6 +20,8 @@ export function validateSettings(input: unknown): CameraSettings {
   enumValue(s.date?.mode, ['auto', 'on', 'off']); enumValue(s.date?.fmt, ['yy', 'iso', 'ddmmyy', 'ddmmyyyy', 'mmddyyyy']);
   enumValue(s.date?.size, ['sm', 'md', 'lg']); enumValue(s.date?.orient, ['auto', 'p', 'l']); enumValue(s.date?.style, ['amber', 'red']);
   const filmQuality = assertFilmQualityForPreset(s.lutId, s.filmQuality);
+  const source = s.nonColorSource;
+  if (source !== undefined && (!source || source.version !== 1 || (source.presetId !== 'none' && !PRESETS.some(p => p.id === source.presetId)) || !Number.isFinite(source.intensity) || source.intensity < 0 || source.intensity > 1)) throw new Error('색감 비교의 질감 보관값이 올바르지 않습니다');
   return { ...structuredClone(s), variation: validateVariation(s.variation), ...(filmQuality ? { filmQuality } : {}) };
 }
 export function readRecipes(): Recipe[] {

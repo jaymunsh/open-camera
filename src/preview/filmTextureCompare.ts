@@ -1,6 +1,7 @@
 import { validateSettings } from '../capture/recipes';
 import type { CameraSettings } from '../capture/types';
 import { resolveFilmQuality } from '../engine/filmQuality';
+import { nonColorSource } from '../engine/look';
 import { renderFilteredCanvas } from '../engine/pipeline';
 import type { LutData } from '../engine/types';
 import { clonePreviewSource, type PreviewSource } from './source';
@@ -23,7 +24,7 @@ export function renderFilmTextureComparison(source: PreviewSource, settings: Cam
       check();
       const key = `texture-${s.lutId}`, amount = s.lutId === 'none' ? 0 : s.intensity;
       const before = await renderFilteredCanvas(frozen.canvas, s.params, key, lut, amount); outputs.push(before); check();
-      const quality = resolveFilmQuality(s.filmQuality, { params: s.params, fx: null, intensity: s.intensity, strengthMode: s.strengthMode, grainOff: s.grainOff, pattern: null });
+      const quality = resolveFilmQuality(s.filmQuality, { params: s.params, fx: null, intensity: nonColorSource(s).intensity, strengthMode: s.strengthMode, grainOff: s.grainOff, pattern: null });
       const after = await renderFilteredCanvas(frozen.canvas, s.params, key, lut, amount, false, null, null, undefined, undefined, undefined, undefined, undefined, { lens: 'none', lensAmount: 0, gentle: false, filmQuality: quality });
       outputs.push(after); check();
       return { before, after, release };

@@ -5,6 +5,7 @@ import { validateFramePatterns } from './variation';
 import { canvasBlob, composeFrames, drawCompositionDate } from './composite';
 import type { CameraSettings, CaptureRecord } from './types';
 import { assertFilmQualityForPreset, resolveFilmQuality } from '../engine/filmQuality';
+import { nonColorSource } from '../engine/look';
 
 export interface ReprocessVariationOptions { patterns: readonly (FilmPattern | null)[] }
 export async function renderReprocessed(record: CaptureRecord, settings: CameraSettings, lut: LutData | null, fx: FxSpec | null, stamp = true, signal?: AbortSignal, variation?: ReprocessVariationOptions): Promise<HTMLCanvasElement> {
@@ -23,7 +24,7 @@ export async function renderReprocessed(record: CaptureRecord, settings: CameraS
       const framePreferences = validateVariation(record.frameSettings?.[index]?.variation ?? preferences);
       const resolved = resolveVariation(settings.params, fx, pattern ? framePreferences : DEFAULT_VARIATION, pattern, settings.grainOff);
       const filmQuality = resolveFilmQuality(quality ? { ...quality, seed: record.frameSettings?.[index]?.filmQuality?.seed ?? quality.seed } : undefined,
-        { params: resolved.params, fx: resolved.fx, intensity: settings.intensity, strengthMode: settings.strengthMode, grainOff: settings.grainOff, pattern });
+        { params: resolved.params, fx: resolved.fx, intensity: nonColorSource(settings).intensity, strengthMode: settings.strengthMode, grainOff: settings.grainOff, pattern });
       frames.push(await renderFilteredCanvas(bitmap, resolved.params, `preset-${settings.lutId}`, lut, settings.lutId === 'none' ? 0 : settings.intensity, false, null, resolved.fx, null, undefined, null, [], { on: false, fmt: settings.date.fmt, size: settings.date.size, orient: settings.date.orient }, { lens: settings.lens, lensAmount: settings.lensAmount, gentle: settings.gentle && !filmQuality, filmQuality }));
     }
     finally { bitmap.close(); }
