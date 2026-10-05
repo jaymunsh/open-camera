@@ -1,6 +1,7 @@
 import type { FxSpec, LutData } from './types';
 import { idbDel, idbGet, idbPut } from '../utils/lutStore';
 import { ASSET_VERSION, assetUrl } from '../utils/assets';
+import { SIGNATURE_FILMS } from './signatureFilms';
 
 type V3 = [number, number, number];
 type ColorFn = (r: number, g: number, b: number) => V3;
@@ -66,6 +67,25 @@ export interface Preset {
   file?: string;
   hald?: 'linear' | 'tiled';
   fx?: FxSpec;
+  sourcePresetId?: string;
+}
+
+export const SIGNATURE_CANDIDATE_PRESETS: readonly Preset[] = Object.freeze(SIGNATURE_FILMS.map(film => Object.freeze({
+  id: film.id, label: film.label, group: '대표 룩 · 시험중', sourcePresetId: film.sourcePresetId,
+})));
+
+export async function loadSignatureCandidate(id: string): Promise<LutData> {
+  if (!SIGNATURE_CANDIDATE_PRESETS.some(p => p.id === id)) throw new Error(`unknown signature preset: ${id}`);
+  const visited = new Set<string>();
+  let current = id;
+  while (true) {
+    if (visited.has(current)) throw new Error('필름 색 데이터에 순환 참조가 있습니다');
+    visited.add(current);
+    const preset = SIGNATURE_CANDIDATE_PRESETS.find(p => p.id === current) ?? PRESETS.find(p => p.id === current);
+    if (!preset) throw new Error(`unknown preset: ${current}`);
+    if (!preset.sourcePresetId) return loadPresetLut(current);
+    current = preset.sourcePresetId;
+  }
 }
 
 export const STUDIO_FILMS = [
