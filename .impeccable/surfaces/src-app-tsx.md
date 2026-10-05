@@ -57,6 +57,17 @@ Signature interaction: preview and saved output share a reproducible pattern,
 while a new-per-shot pattern advances only after successful frame generation.
 No design-world seed applies: this is an incumbent extension, not a redesign.
 
+2026-10-05 approved concept comparison extension: preserve the black/purple
+camera shell and its geometry. Filter sheet gets one compact source/compare row
+and an inline seven-photo chooser; no extra permanent camera toolbar. A single
+protected comparison dialog presents the same frozen original with A/B controls,
+independent strengths, shared center zoom, and explicit apply. Thumbnails use the
+selected neutral photograph; original masters load only when comparing. Studio
+uses restrained disclosure rows for decoration, lens and film variation, keeping
+auto/manual controls visible. Generated rasters carry provenance in
+docs/sample-provenance.md. Signature: change the comparison photograph without
+changing camera settings; apply changes only the selected LUT and strength.
+
 Verify small portrait and short landscape layouts, keyboard tab/focus behavior,
 template geometry and pixels, shot retention, paused automatic capture, legacy
 output compatibility, full regression suite and build. Use the existing temporary

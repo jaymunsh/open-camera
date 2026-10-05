@@ -53,6 +53,12 @@ import { CapturePreview, type PreviewDraw, type PreviewSize } from './components
 import { LensComparison } from './components/LensComparison';
 import { CameraInfo } from './components/CameraInfo';
 import { FilmVariationControls } from './components/FilmVariationControls';
+import { PreviewSourcePicker } from './components/PreviewSourcePicker';
+import { LutComparison } from './components/LutComparison';
+import { usePreviewSource } from './preview/usePreviewSource';
+import { SAMPLES } from './preview/samples';
+import type { PreviewSource } from './preview/source';
+import type { ComparisonChoice } from './preview/compare';
 
 type Mode = 'camera' | 'edit';
 type Panel = 'filters' | 'adjust' | 'beauty';
@@ -166,6 +172,13 @@ export default function App() {
   const look: RenderLook = { lens: creativeOptions.lens, lensAmount: creativeOptions.lensAmount, gentle: creativeOptions.gentle && gentleAvailable };
   const lookRef = useRef(look); lookRef.current = look;
   const recipeApplying = useRef(false);
+  const comparisonApplying = useRef(false);
+  const [comparisonSource, setComparisonSource] = useState<PreviewSource | null>(null);
+  const [comparisonLoading, setComparisonLoading] = useState(false);
+  const [comparisonRecord, setComparisonRecord] = useState<CaptureRecord | null>(null);
+  const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
+  const comparisonEpoch = useRef(0);
+  const comparisonFocus = useRef<HTMLElement | null>(null);
   useEffect(() => { try { localStorage.setItem('oc-datestyle', dateStyle); localStorage.setItem('oc-keep-original', keepOriginal ? '1' : '0'); } catch { /* defaults remain usable when storage is blocked */ } }, [dateStyle, keepOriginal]);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -449,9 +462,10 @@ export default function App() {
 
   const fxSeedRef = useRef(0.5);
   useEffect(() => {
-    fxSeedRef.current = Math.random();
-    if (!recipeApplying.current) setGrainOff(false);
+    if (!comparisonApplying.current) fxSeedRef.current = Math.random();
+    if (!recipeApplying.current && !comparisonApplying.current) setGrainOff(false);
     recipeApplying.current = false;
+    comparisonApplying.current = false;
   }, [lutId]);
 
   useEffect(() => {
@@ -638,6 +652,51 @@ export default function App() {
     }
     return editSrc;
   }, [mode, editSrc, videoRef]);
+
+  const preview = usePreviewSource({ getCameraSource: () => {
+    const video = videoRef.current; return mode === 'camera' && video && video.readyState >= 2 ? video : null;
+  }, cameraRatio: ratio, cameraMirror: facing === 'user', sceneAvailable: mode === 'camera' && ready,
+    editSource: mode === 'edit' && !reprocessRecord ? editSrc : null, editToken, reprocessRecord });
+  const comparisonChoices = useMemo(() => [
+    ...PRESETS.map((preset) => ({ id: preset.id, label: preset.label, custom: false })),
+    ...customs.map((custom) => ({ id: custom.id, label: custom.name, custom: true })),
+  ], [customs]);
+  const previewOptions = useMemo(() => ({ sampleId: preview.sourceKind === 'sample' ? preview.sampleId : undefined,
+    source: preview.thumbnailSource, sourceVersion: preview.sourceKey, srcKey: preview.sourceKey }), [preview.sourceKind, preview.sampleId, preview.thumbnailSource, preview.sourceKey]);
+  useEffect(() => () => comparisonSource?.release(), [comparisonSource]);
+  const closeComparison = () => {
+    comparisonEpoch.current++; setComparisonSource(null); setComparisonLoading(false);
+    requestAnimationFrame(() => comparisonFocus.current?.focus());
+  };
+  const openComparison = async (record?: CaptureRecord) => {
+    const token = ++comparisonEpoch.current; comparisonFocus.current = document.activeElement as HTMLElement | null; setComparisonLoading(true);
+    setComparisonRecord(record ?? preview.activeCapture ?? reprocessRecord);
+    try {
+      if (record) await preview.selectCapture(record, 0);
+      const source = await preview.prepareComparison();
+      if (token !== comparisonEpoch.current) { source.release(); return; }
+      setComparisonSource(source);
+    } catch (error) { showToast(error instanceof Error ? error.message : '비교 사진을 불러오지 못했어요.'); }
+    finally { if (token === comparisonEpoch.current) setComparisonLoading(false); }
+  };
+  const changePreview = async (action: () => Promise<void>) => {
+    const token = ++comparisonEpoch.current; await action();
+    if (!comparisonSource || token !== comparisonEpoch.current) return;
+    try { const source = await preview.prepareComparison(); if (token === comparisonEpoch.current) setComparisonSource(source); else source.release(); }
+    catch (error) { showToast(error instanceof Error ? error.message : '사진 선택에 실패했어요.'); }
+  };
+  const previewLabel = preview.sourceKind === 'sample' ? `샘플 · ${SAMPLES.find((s) => s.id === preview.sampleId)?.label}` : preview.sourceKind === 'scene' ? '현재 장면' : preview.sourceKind === 'import' ? '편집 사진' : `원본 컷 ${preview.captureIndex + 1}`;
+  const sourcePicker = <PreviewSourcePicker sampleId={preview.sampleId} sourceKind={preview.sourceKind} sceneAvailable={mode === 'camera' && ready} importAvailable={mode === 'edit' && !!editSrc && !reprocessRecord}
+    captureFrames={preview.activeCapture?.originals.length ?? comparisonRecord?.originals.length ?? reprocessRecord?.originals.length ?? 0} captureIndex={preview.captureIndex} busy={preview.busy} error={preview.error}
+    onSample={(id) => void changePreview(() => preview.selectSample(id))} onScene={() => void changePreview(preview.selectScene)} onImport={() => void changePreview(preview.selectImport)}
+    onCaptureIndex={(index) => { const record = preview.activeCapture ?? comparisonRecord ?? reprocessRecord; if (record) void changePreview(() => preview.selectCapture(record, index)); }}
+    onRefresh={() => void changePreview(preview.selectScene)} onRetry={() => void changePreview(preview.retry)} />;
+  const previewToolbar = <div className="preview-selector"><div className="preview-selector-row"><button aria-expanded={sourcePickerOpen} onClick={() => setSourcePickerOpen(!sourcePickerOpen)}>{previewLabel}<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m6 9 6 6 6-6" /></svg></button><button disabled={preview.busy || !!preview.error || comparisonLoading} onClick={() => void openComparison()}>색감 비교</button></div>{sourcePickerOpen && sourcePicker}{preview.error && !sourcePickerOpen && <p role="alert" className="camera-warning">{preview.error} <button onClick={() => void preview.retry()}>다시 시도</button></p>}</div>;
+  const applyComparison = (choice: ComparisonChoice) => {
+    if (busy || creative.working || creative.locked || pendingLut || preview.busy || preview.error) return;
+    if (choice.id !== lutId) comparisonApplying.current = true;
+    setLutId(choice.id); setLutIntensity(choice.amount); closeComparison();
+  };
 
   const confirmEditEntry = useCallback(() => !creative.frames.length || window.confirm('진행 중인 촬영을 버리고 사진 편집을 시작할까요?'), [creative.frames.length]);
   const openImage = useCallback(async (f: File) => {
@@ -1338,12 +1397,13 @@ export default function App() {
           onSelect={setLutId}
           getSource={getSource}
           onExpand={() => setSheetOpen(true)}
-          deps={[thumbKey, customs]}
+          deps={[thumbKey, customs, preview.sourceKey]}
           customs={customs}
           srcKey={mode === 'edit' && editSrc ? `e${editToken}` : 'smp'}
           preferSrc={mode === 'edit'}
           intensity={lutIntensity}
           onIntensity={setLutIntensity}
+          previewOptions={previewOptions}
         />
       ) : (
         <AdjustPanel
@@ -1465,7 +1525,10 @@ export default function App() {
           selected={lutId}
           onSelect={setLutId}
           getSource={getSource}
-          onClose={() => setSheetOpen(false)}
+          onClose={() => { comparisonEpoch.current++; setComparisonLoading(false); setSheetOpen(false); }}
+          active={!comparisonSource}
+          previewToolbar={previewToolbar}
+          previewOptions={previewOptions}
           customs={customs}
           srcKey={mode === 'edit' && editSrc ? `e${editToken}` : 'smp'}
           preferSrc={mode === 'edit'}
@@ -1547,7 +1610,7 @@ export default function App() {
         boothInterval={creative.boothInterval}
         onBoothInterval={creative.changeBoothInterval}
         onComposition={creative.setOptions}
-        framePreview={<StudioFramePreview source={studioPreviewSource} frames={creative.mode === 'booth' || creative.mode === 'instant' ? creative.frames : []} options={creative.options} mode={creative.mode === 'instant' ? 'instant' : 'booth'} ratio={RATIOS[tiledMode ? captureRatioIdx : compositeRatioIdx]!} params={resolvedPreview.params} lut={applied.lut} lutKey={applied.key} amount={applied.amount} fx={resolvedPreview.fx} look={look} ready={renderReady} inputs={studioCaptureInputs} date={{ on: showDate, fmt: dateFmt, size: dateSize, orient: dateOrient, style: dateStyle, timestamp: creative.frames.at(-1)?.createdAt ?? studioOpenedAt }} />}
+framePreview={<StudioFramePreview sampleId={preview.sampleId} source={studioPreviewSource} frames={creative.mode === 'booth' || creative.mode === 'instant' ? creative.frames : []} options={creative.options} mode={creative.mode === 'instant' ? 'instant' : 'booth'} ratio={RATIOS[tiledMode ? captureRatioIdx : compositeRatioIdx]!} params={resolvedPreview.params} lut={applied.lut} lutKey={applied.key} amount={applied.amount} fx={resolvedPreview.fx} look={look} ready={renderReady} inputs={studioCaptureInputs} date={{ on: showDate, fmt: dateFmt, size: dateSize, orient: dateOrient, style: dateStyle, timestamp: creative.frames.at(-1)?.createdAt ?? studioOpenedAt }} />}
         variationControls={<FilmVariationControls settings={variation.settings} locked={busy || creative.working || creative.locked || pendingLut} warning={variation.warning} writable={variation.writable} notice={reprocessRecord ? `다른 패턴은 전체 컷에 적용해요. 고정하면 마지막 컷의 패턴을 전체 컷에 사용해요.${editPatterns?.at(-1) === null ? ' 마지막 컷에 패턴이 없으면 새 패턴으로 고정해요.' : ''}` : undefined} onChange={changeVariation} onReroll={rerollVariation} onFreeze={freezeVariation} onSaveRecipe={() => { setCreativeOpen(false); setRecipeOpen(true); }} onReset={() => { variation.resetStored(); if (reprocessRecord) { setEditPatterns(Array(reprocessRecord.originals.length).fill(null)); updateEditVariation(DEFAULT_VARIATION); } }} />}
         selectedFilm={lutId}
         onFilm={setLutId}
@@ -1583,7 +1646,9 @@ export default function App() {
         onClose={() => setCreativeOpen(false)}
       />}
       {recipeOpen && <RecipeSheet settings={generalSettings} onApply={applyCameraSettings} onClose={() => setRecipeOpen(false)} />}
-      {creative.historyOpen && <PhotoHistory records={creative.records} warning={creative.warning} onClose={() => creative.setHistoryOpen(false)} onDelete={creative.remove} onReprocess={reprocessPhoto} />}
+      {creative.historyOpen && <PhotoHistory active={!comparisonSource} records={creative.records} warning={creative.warning} onClose={() => { comparisonEpoch.current++; creative.setHistoryOpen(false); }} onDelete={creative.remove} onReprocess={reprocessPhoto} onCompare={(record) => void openComparison(record)} />}
+      {comparisonSource && <LutComparison source={comparisonSource} choices={comparisonChoices} selectedId={lutId} locked={busy || creative.working || creative.locked || pendingLut || preview.busy || !!preview.error} onApply={applyComparison} onClose={closeComparison}
+        sourcePicker={<details className="comparison-source-details"><summary>비교 사진 바꾸기</summary>{sourcePicker}</details>} />}
       {creative.review && <CaptureWorkspace capture={creative} />}
 
       {licOpen && (

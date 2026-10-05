@@ -1,10 +1,11 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 
-export function CameraDialog({ title, onClose, children, busy = false, className = '', footer }: { title: string; onClose: () => void; children: ReactNode; busy?: boolean; className?: string; footer?: ReactNode }) {
+export function CameraDialog({ title, onClose, children, busy = false, className = '', footer, active = true }: { title: string; onClose: () => void; children: ReactNode; busy?: boolean; className?: string; footer?: ReactNode; active?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const close = useRef(onClose); close.current = onClose;
   const busyRef = useRef(busy); busyRef.current = busy;
   useEffect(() => {
+    if (!active) return;
     const previous = document.activeElement as HTMLElement | null;
     ref.current?.focus();
     const key = (e: KeyboardEvent) => {
@@ -19,8 +20,8 @@ export function CameraDialog({ title, onClose, children, busy = false, className
     };
     document.addEventListener('keydown', key);
     return () => { document.removeEventListener('keydown', key); previous?.focus(); };
-  }, []);
-  return <div className="camera-dialog-back" onClick={() => !busy && onClose()}>
+  }, [active]);
+  return <div className="camera-dialog-back" hidden={!active} style={!active ? { display: 'none' } : undefined} onClick={() => !busy && onClose()}>
     <div className={`camera-dialog ${className}`} role="dialog" aria-label={title} aria-modal="true" tabIndex={-1} ref={ref} onClick={(e) => e.stopPropagation()}>
       <div className="camera-dialog-head"><h2>{title}</h2><button disabled={busy} onClick={onClose}>닫기</button></div>
       {children}

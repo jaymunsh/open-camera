@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { PRESETS } from '../engine/lut';
 import { applyThumb, observePresetThumbs, type ThumbnailOptions } from './thumbs';
 
@@ -33,9 +33,11 @@ interface Props {
   srcKey?: string;
   preferSrc?: boolean;
   previewOptions?: ThumbnailOptions;
+  previewToolbar?: ReactNode;
+  active?: boolean;
 }
 
-export function FilterSheet({ selected, onSelect, getSource, onClose, customs, srcKey = 'smp', preferSrc = false, previewOptions }: Props) {
+export function FilterSheet({ selected, onSelect, getSource, onClose, customs, srcKey = 'smp', preferSrc = false, previewOptions, previewToolbar, active = true }: Props) {
   const refs = useRef(new Map<HTMLCanvasElement, string>());
   const sheetRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -46,6 +48,21 @@ export function FilterSheet({ selected, onSelect, getSource, onClose, customs, s
   const drag = useRef<{ y: number; active: boolean }>({ y: 0, active: false });
   const pressTimer = useRef<number>(0);
   const pressConsumed = useRef(false);
+  const close = useRef(onClose); close.current = onClose;
+  useEffect(() => {
+    if (!active) return;
+    const previous = document.activeElement as HTMLElement | null; sheetRef.current?.focus();
+    const key = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') close.current();
+      if (event.key !== 'Tab') return;
+      const controls = [...(sheetRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled)') ?? [])].filter((el) => el.getClientRects().length);
+      const first = controls[0], last = controls.at(-1); const outside = !controls.includes(document.activeElement as HTMLElement);
+      if (!first) { event.preventDefault(); sheetRef.current?.focus(); }
+      else if (event.shiftKey && (document.activeElement === first || outside)) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && (document.activeElement === last || outside)) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', key); return () => { document.removeEventListener('keydown', key); previous?.focus(); };
+  }, [active]);
 
   const allItems = useMemo(
     () => [
@@ -103,10 +120,11 @@ export function FilterSheet({ selected, onSelect, getSource, onClose, customs, s
   };
 
   return (
-    <div className="sheet-backdrop" onClick={onClose}>
+    <div className="sheet-backdrop" hidden={!active} style={!active ? { display: 'none' } : undefined} onClick={onClose}>
       <div
         className="sheet"
         ref={sheetRef}
+        role="dialog" aria-label="필터" aria-modal={active ? 'true' : undefined} tabIndex={-1}
         style={dragY > 0 ? { transform: `translateY(${dragY}px)`, transition: 'none' } : undefined}
         onClick={(e) => e.stopPropagation()}
       >
@@ -134,6 +152,7 @@ export function FilterSheet({ selected, onSelect, getSource, onClose, customs, s
           </span>
           <button onClick={onClose}>닫기</button>
         </div>
+        {previewToolbar}
         <div className="sheet-tabs">
           {sections.map((s) => (
             <button key={s.title} onClick={() => jumpTo(s.title)}>
