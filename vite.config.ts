@@ -19,9 +19,13 @@ function hashDirectory(relative: string) {
 }
 for (const dir of ['luts', 'wasm', 'models']) hashDirectory(dir);
 const assetVersion = hash.digest('hex').slice(0, 16);
+const sampleIds = ['portrait', 'food', 'landscape', 'cafe', 'street', 'night', 'interior'];
+const sampleVersions = Object.fromEntries(sampleIds.map((id) => [id, createHash('sha256')
+  .update(readFileSync(join(publicRoot, `samples/concepts/${id}.webp`)))
+  .update(readFileSync(join(publicRoot, `samples/masters/${id}.png`))).digest('hex').slice(0, 16)]));
 
 export default defineConfig({
-  define: { __ASSET_VERSION__: JSON.stringify(assetVersion) },
+  define: { __ASSET_VERSION__: JSON.stringify(assetVersion), __SAMPLE_VERSIONS__: JSON.stringify(sampleVersions) },
   server: {
     allowedHosts: ['.trycloudflare.com'],
   },
@@ -31,9 +35,15 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icons/*.png', 'fonts/*', 'licenses/*', 'luts/film/CREDITS.md'],
       workbox: {
-        globIgnores: ['wasm/**', 'models/**'],
+        globIgnores: ['wasm/**', 'models/**', 'samples/concepts/**', 'samples/masters/**'],
+        additionalManifestEntries: sampleIds.map((id) => ({ url: `samples/concepts/${id}.webp?v=${sampleVersions[id]}`, revision: null })),
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         runtimeCaching: [
+          {
+            urlPattern: /\/samples\/masters\/.*\?v=/,
+            handler: 'CacheFirst',
+            options: { cacheName: 'oc-sample-masters', expiration: { maxEntries: 2 } },
+          },
           {
             urlPattern: /\/(wasm|models)\/.*/i,
             handler: 'CacheFirst',
