@@ -27,7 +27,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshot.png" width="300" alt="open-camera 앱 화면 — 1:1 비율, 필터 스트립" />
+  <img src="docs/screenshots/2026-10-05-color-comparison.png" width="300" alt="같은 카페 사진에서 FUJI 160C와 SUPERIA 400의 색감을 비교하는 화면" />
 </p>
 
 > **지원 환경**: iPhone Safari / 홈 화면 PWA 사용을 중심으로 개발합니다.
