@@ -2,6 +2,7 @@ import { FRAG_SHADER, VERT_SHADER } from './shaders';
 import { renderStampRed, renderStampSoft, stampFontReady } from './datestamp';
 import type { RenderLook } from './look';
 import { DEFAULT_PARAMS, type FilterParams, type FxSpec, type LutData } from './types';
+import { patternNoise } from './variation';
 
 export interface RenderOpts {
   fit?: 'cover' | 'contain';
@@ -170,6 +171,8 @@ export class FilterPipeline {
   private prog!: WebGLProgram;
   private srcTex!: WebGLTexture;
   private grainTex!: WebGLTexture;
+  private patternTex: WebGLTexture | null = null;
+  private patternSeed: number | null = null;
   private beautyTex!: WebGLTexture;
   private warpTex!: WebGLTexture;
   private lutTex!: WebGLTexture;
@@ -230,6 +233,8 @@ export class FilterPipeline {
     this.lutKey = null;
     this.lutData = null;
     this.locs = {};
+    this.patternTex = null;
+    this.patternSeed = null;
 
     const prog = gl.createProgram()!;
     gl.attachShader(prog, compile(gl, gl.VERTEX_SHADER, VERT_SHADER));
@@ -465,6 +470,9 @@ export class FilterPipeline {
     const cw = this.canvas.width;
     const ch = this.canvas.height;
     if (!cw || !ch) return;
+    if (opts.fx !== undefined) this.fx = opts.fx;
+    const fx = this.fx;
+    const pattern = fx?.pattern;
 
     const fit = opts.fit ?? 'cover';
     const sa = this.srcW / this.srcH;
@@ -508,7 +516,21 @@ export class FilterPipeline {
     gl.bindTexture(gl.TEXTURE_3D, this.lutTex);
     gl.uniform1i(this.locs.u_lut, 1);
     gl.activeTexture(gl.TEXTURE2);
-    gl.bindTexture(gl.TEXTURE_2D, this.grainTex);
+    if (pattern && (!this.patternTex || this.patternSeed !== pattern.seed)) {
+      const pixels = patternNoise(pattern.seed);
+      const texture = gl.createTexture();
+      if (!texture) throw new Error('필름 패턴을 만들 수 없습니다');
+      if (this.patternTex) gl.deleteTexture(this.patternTex);
+      this.patternTex = texture;
+      this.patternSeed = pattern.seed;
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 256, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    }
+    gl.bindTexture(gl.TEXTURE_2D, pattern ? this.patternTex : this.grainTex);
     gl.uniform1i(this.locs.u_grainTex, 2);
     gl.activeTexture(gl.TEXTURE3);
     gl.bindTexture(gl.TEXTURE_2D, this.beautyTex);
@@ -539,13 +561,11 @@ export class FilterPipeline {
     gl.uniform2f(u.u_uvScale, sx, sy);
     gl.uniform1f(u.u_mirror, opts.mirror ? 1 : 0);
     gl.uniform1f(u.u_aspect, vw / vh);
-    gl.uniform1f(u.u_time, opts.time ?? 0);
+    gl.uniform1f(u.u_time, pattern ? pattern.seed * 100 : opts.time ?? 0);
     gl.uniform1f(u.u_gentle, opts.look?.gentle ? 1 : 0);
     gl.uniform1f(u.u_creativeLens, opts.look?.lens === 'star' ? 1 : opts.look?.lens === 'prism' ? 2 : 0);
     gl.uniform1f(u.u_creativeLensAmount, opts.look?.lensAmount ?? 0);
 
-    if (opts.fx !== undefined) this.fx = opts.fx;
-    const fx = this.fx;
     // bloom (and halation/soft fx) sample low mips via textureLod — generate
     // them lazily here so export and live paths both work regardless of the
     // mip decision made back in setSource. Also enable trilinear filtering
@@ -572,7 +592,7 @@ export class FilterPipeline {
       this.srcMip = true;
     }
     gl.uniform1f(u.u_leakAmt, fx?.leak ?? 0);
-    gl.uniform1f(u.u_leakSeed, fx?.seed ?? 0.5);
+    gl.uniform1f(u.u_leakSeed, pattern?.seed ?? fx?.seed ?? 0.5);
     gl.uniform1f(u.u_halation, fx?.halation ?? 0);
     gl.uniform1f(u.u_soft, fx?.soft ?? 0);
     gl.uniform1f(u.u_aberr, fx?.aberr ?? 0);
