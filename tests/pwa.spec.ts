@@ -7,6 +7,10 @@ async function activate(page: Page) {
   await page.evaluate(() => navigator.serviceWorker.ready.then(() => true));
   await page.reload();
   await page.waitForFunction(() => !!navigator.serviceWorker.controller);
+  // Offscreen LUTs are intentionally lazy: select the filter whose cache we test.
+  await page.locator('.strip-item').filter({ hasText: /^AMATORKA$/ }).click();
+  await expect(page.locator('.filter-name')).toHaveText('AMATORKA');
+  await expect(page.locator('.filter-name')).not.toHaveClass(/pending/);
   await expect.poll(() => page.evaluate(async () => {
     const cache = await caches.open('oc-luts');
     return (await cache.keys()).some(r => r.url.includes('lookup_amatorka.png'));

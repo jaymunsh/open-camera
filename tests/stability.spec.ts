@@ -220,7 +220,9 @@ test('failed LUT fetch can recover without reloading the app', async ({ page }) 
   await page.goto('/');
   const result = await page.evaluate(async () => {
     const { loadPresetLut } = await import('/src/engine/lut.ts?network-retry-test');
-    const { idbDel } = await import('/src/utils/lutStore.ts');
+    const { idbDel, idbGet } = await import('/src/utils/lutStore.ts');
+    // Initialize the schema explicitly; lazy offscreen LUTs need not open it.
+    await idbGet('test-schema-probe');
     const keys = await new Promise<string[]>((resolve) => {
       const r = indexedDB.open('oc-store', 1);
       r.onsuccess = () => { const db = r.result; const q = db.transaction('lut-files').objectStore('lut-files').getAllKeys();
@@ -244,7 +246,8 @@ test('HTTP failures are rejected before caching even if the body resembles a val
   await page.goto('/');
   const result = await page.evaluate(async () => {
     const { loadPresetLut } = await import('/src/engine/lut.ts?http-status-test');
-    const { idbDel } = await import('/src/utils/lutStore.ts');
+    const { idbDel, idbGet } = await import('/src/utils/lutStore.ts');
+    await idbGet('test-schema-probe');
     const r = indexedDB.open('oc-store', 1);
     const keys = await new Promise<string[]>((resolve) => { r.onsuccess = () => {
       const q = r.result.transaction('lut-files').objectStore('lut-files').getAllKeys();
@@ -292,6 +295,7 @@ test('entering photo edit ends camera capture and returning starts a new live tr
 test('bundled LUT requests use a content-versioned URL', async ({ page }) => {
   const urls: string[] = []; page.on('request', r => { if (r.url().includes('/luts/')) urls.push(r.url()); });
   await page.goto('/');
+  await page.locator('.strip-item').filter({ hasText: /^AMATORKA$/ }).click();
   await expect.poll(() => urls.length).toBeGreaterThan(0);
   expect(urls.every(url => /^[a-f0-9]{16}$/.test(new URL(url).searchParams.get('v') ?? ''))).toBe(true);
 });
