@@ -95,7 +95,7 @@ export function FilterSheet({ selected, onSelect, getSource, onClose, customs, s
       scrollRef.current,
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customs, srcKey, previewOptions]);
+  }, [customs, srcKey, previewOptions, sections]);
 
   const jumpTo = (title: string) => {
     const el = groupRefs.current.get(title);
@@ -200,6 +200,7 @@ export function FilterSheet({ selected, onSelect, getSource, onClose, customs, s
                         if (el) {
                           refs.current.set(el, p.id);
                           applyThumb(el, p.id, srcKey);
+                          return () => { refs.current.delete(el); };
                       }
                       }}
                     />

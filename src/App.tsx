@@ -175,6 +175,7 @@ export default function App() {
   const comparisonApplying = useRef(false);
   const [comparisonSource, setComparisonSource] = useState<PreviewSource | null>(null);
   const [comparisonLoading, setComparisonLoading] = useState(false);
+  const [comparisonError, setComparisonError] = useState<string | null>(null);
   const [comparisonRecord, setComparisonRecord] = useState<CaptureRecord | null>(null);
   const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
   const comparisonEpoch = useRef(0);
@@ -665,25 +666,30 @@ export default function App() {
     source: preview.thumbnailSource, sourceVersion: preview.sourceKey, srcKey: preview.sourceKey }), [preview.sourceKind, preview.sampleId, preview.thumbnailSource, preview.sourceKey]);
   useEffect(() => () => comparisonSource?.release(), [comparisonSource]);
   const closeComparison = () => {
-    comparisonEpoch.current++; setComparisonSource(null); setComparisonLoading(false);
+    comparisonEpoch.current++; setComparisonSource(null); setComparisonLoading(false); setComparisonError(null);
     requestAnimationFrame(() => comparisonFocus.current?.focus());
   };
   const openComparison = async (record?: CaptureRecord) => {
-    const token = ++comparisonEpoch.current; comparisonFocus.current = document.activeElement as HTMLElement | null; setComparisonLoading(true);
+    const token = ++comparisonEpoch.current; comparisonFocus.current = document.activeElement as HTMLElement | null; setComparisonLoading(true); setComparisonError(null);
     setComparisonRecord(record ?? preview.activeCapture ?? reprocessRecord);
     try {
       if (record) await preview.selectCapture(record, 0);
       const source = await preview.prepareComparison();
       if (token !== comparisonEpoch.current) { source.release(); return; }
       setComparisonSource(source);
-    } catch (error) { showToast(error instanceof Error ? error.message : '비교 사진을 불러오지 못했어요.'); }
+    } catch (error) { if (token === comparisonEpoch.current) setComparisonError(error instanceof Error ? error.message : '비교 사진을 불러오지 못했어요.'); }
     finally { if (token === comparisonEpoch.current) setComparisonLoading(false); }
   };
   const changePreview = async (action: () => Promise<void>) => {
-    const token = ++comparisonEpoch.current; await action();
-    if (!comparisonSource || token !== comparisonEpoch.current) return;
-    try { const source = await preview.prepareComparison(); if (token === comparisonEpoch.current) setComparisonSource(source); else source.release(); }
-    catch (error) { showToast(error instanceof Error ? error.message : '사진 선택에 실패했어요.'); }
+    const token = ++comparisonEpoch.current;
+    setComparisonLoading(!!comparisonSource); setComparisonError(null);
+    try {
+      await action();
+      if (!comparisonSource || token !== comparisonEpoch.current) return;
+      const source = await preview.prepareComparison();
+      if (token === comparisonEpoch.current) setComparisonSource(source); else source.release();
+    } catch (error) { if (token === comparisonEpoch.current) setComparisonError(error instanceof Error ? error.message : '사진 선택에 실패했어요.'); }
+    finally { if (token === comparisonEpoch.current) setComparisonLoading(false); }
   };
   const previewLabel = preview.sourceKind === 'sample' ? `샘플 · ${SAMPLES.find((s) => s.id === preview.sampleId)?.label}` : preview.sourceKind === 'scene' ? '현재 장면' : preview.sourceKind === 'import' ? '편집 사진' : `원본 컷 ${preview.captureIndex + 1}`;
   const sourcePicker = <PreviewSourcePicker sampleId={preview.sampleId} sourceKind={preview.sourceKind} sceneAvailable={mode === 'camera' && ready} importAvailable={mode === 'edit' && !!editSrc && !reprocessRecord}
@@ -691,9 +697,9 @@ export default function App() {
     onSample={(id) => void changePreview(() => preview.selectSample(id))} onScene={() => void changePreview(preview.selectScene)} onImport={() => void changePreview(preview.selectImport)}
     onCaptureIndex={(index) => { const record = preview.activeCapture ?? comparisonRecord ?? reprocessRecord; if (record) void changePreview(() => preview.selectCapture(record, index)); }}
     onRefresh={() => void changePreview(preview.selectScene)} onRetry={() => void changePreview(preview.retry)} />;
-  const previewToolbar = <div className="preview-selector"><div className="preview-selector-row"><button aria-expanded={sourcePickerOpen} onClick={() => setSourcePickerOpen(!sourcePickerOpen)}>{previewLabel}<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m6 9 6 6 6-6" /></svg></button><button disabled={preview.busy || !!preview.error || comparisonLoading} onClick={() => void openComparison()}>색감 비교</button></div>{sourcePickerOpen && sourcePicker}{preview.error && !sourcePickerOpen && <p role="alert" className="camera-warning">{preview.error} <button onClick={() => void preview.retry()}>다시 시도</button></p>}</div>;
+  const previewToolbar = <div className="preview-selector"><div className="preview-selector-row"><button aria-expanded={sourcePickerOpen} onClick={() => setSourcePickerOpen(!sourcePickerOpen)}>{previewLabel}<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m6 9 6 6 6-6" /></svg></button><button disabled={preview.busy || !!preview.error || comparisonLoading} onClick={() => void openComparison()}>색감 비교</button></div>{sourcePickerOpen && sourcePicker}{preview.error && !sourcePickerOpen && <p role="alert" className="camera-warning">{preview.error} <button onClick={() => void preview.retry()}>다시 시도</button></p>}{comparisonError && !comparisonSource && <p role="alert" className="camera-warning">{comparisonError} <button onClick={() => void openComparison()}>다시 시도</button></p>}</div>;
   const applyComparison = (choice: ComparisonChoice) => {
-    if (busy || creative.working || creative.locked || pendingLut || preview.busy || preview.error) return;
+    if (busy || creative.working || creative.locked || pendingLut || preview.busy || preview.error || comparisonLoading || comparisonError) return;
     if (choice.id !== lutId) comparisonApplying.current = true;
     setLutId(choice.id); setLutIntensity(choice.amount); closeComparison();
   };
@@ -1649,6 +1655,7 @@ framePreview={<StudioFramePreview sampleId={preview.sampleId} source={studioPrev
       {recipeOpen && <RecipeSheet settings={generalSettings} onApply={applyCameraSettings} onClose={() => setRecipeOpen(false)} />}
       {creative.historyOpen && <PhotoHistory active={!comparisonSource} records={creative.records} warning={creative.warning} onClose={() => { comparisonEpoch.current++; creative.setHistoryOpen(false); }} onDelete={creative.remove} onReprocess={reprocessPhoto} onCompare={(record) => void openComparison(record)} />}
       {comparisonSource && <LutComparison source={comparisonSource} choices={comparisonChoices} selectedId={lutId} locked={busy || creative.working || creative.locked || pendingLut || preview.busy || !!preview.error} onApply={applyComparison} onClose={closeComparison}
+        sourceLoading={comparisonLoading} sourceError={comparisonError} onRetrySource={() => void changePreview(preview.retry)}
         sourcePicker={<details className="comparison-source-details"><summary>비교 사진 바꾸기</summary>{sourcePicker}</details>} />}
       {creative.review && <CaptureWorkspace capture={creative} />}
 
