@@ -1,6 +1,7 @@
 import type { BeautyParams } from '../components/BeautyPanel';
 import type { DateFmt, DateSize } from '../engine/pipeline';
-import type { FilterParams, FxSpec } from '../engine/types';
+import type { FilmPattern, FilterParams, FxSpec } from '../engine/types';
+import type { VariationSettings } from '../engine/variation';
 
 export type CaptureMode = 'normal' | 'half' | 'booth' | 'double';
 export type BoothMethod = 'auto' | 'manual';
@@ -14,6 +15,7 @@ export interface CameraSettings {
   beauty: BeautyParams;
   ratioIdx: number;
   grainOff: boolean;
+  variation?: VariationSettings;
   strengthMode: 'color' | 'whole';
   gentle: boolean;
   lens: LensMode;
@@ -40,6 +42,7 @@ export interface CaptureRecord {
   originals: Blob[];
   settings?: CameraSettings;
   frameSettings?: CameraSettings[];
+  framePatterns?: (FilmPattern | null)[];
   composition?: CompositionOptions;
   persisted?: boolean;
 }
@@ -49,4 +52,5 @@ export interface CapturedFrame {
   settings: CameraSettings;
   createdAt: number;
   fx: FxSpec | null;
+  pattern?: FilmPattern | null;
 }

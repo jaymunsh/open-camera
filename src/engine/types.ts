@@ -41,6 +41,8 @@ export interface LutData {
   data: Uint8Array;
 }
 
+export interface FilmPattern { version: 1; seed: number }
+
 export interface FxSpec {
   grain?: number;
   leak?: number;
@@ -50,6 +52,7 @@ export interface FxSpec {
   dust?: number;
   date?: boolean;
   seed?: number;
+  pattern?: FilmPattern;
   pix?: number;
   cnoise?: number;
   band?: number;
