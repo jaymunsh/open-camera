@@ -74,6 +74,10 @@ export const SIGNATURE_CANDIDATE_PRESETS: readonly Preset[] = Object.freeze(SIGN
   id: film.id, label: film.label, group: '대표 룩 · 시험중', sourcePresetId: film.sourcePresetId,
 })));
 
+export function availablePresets(previewCandidates: boolean): readonly Preset[] {
+  return previewCandidates ? [...PRESETS, ...SIGNATURE_CANDIDATE_PRESETS] : PRESETS;
+}
+
 export async function loadSignatureCandidate(id: string): Promise<LutData> {
   if (!SIGNATURE_CANDIDATE_PRESETS.some(p => p.id === id)) throw new Error(`unknown signature preset: ${id}`);
   const visited = new Set<string>();
@@ -367,6 +371,7 @@ export const PRESETS: Preset[] = [
 const cache = new Map<string, Promise<LutData>>();
 
 export function loadPresetLut(id: string): Promise<LutData> {
+  if (SIGNATURE_CANDIDATE_PRESETS.some(preset => preset.id === id)) return loadSignatureCandidate(id);
   let p = cache.get(id);
   if (!p) {
     const preset = PRESETS.find((p) => p.id === id);

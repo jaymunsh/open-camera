@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { PRESETS } from '../engine/lut';
+import { PRESETS, type Preset } from '../engine/lut';
 import { applyThumb, observePresetThumbs, type ThumbnailOptions } from './thumbs';
 
 const THUMB = 112;
@@ -35,9 +35,10 @@ interface Props {
   previewOptions?: ThumbnailOptions;
   previewToolbar?: ReactNode;
   active?: boolean;
+  presets?: readonly Preset[];
 }
 
-export function FilterSheet({ selected, onSelect, getSource, onClose, customs, srcKey = 'smp', preferSrc = false, previewOptions, previewToolbar, active = true }: Props) {
+export function FilterSheet({ selected, onSelect, getSource, onClose, customs, srcKey = 'smp', preferSrc = false, previewOptions, previewToolbar, active = true, presets = PRESETS }: Props) {
   const refs = useRef(new Map<HTMLCanvasElement, string>());
   const sheetRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -66,10 +67,10 @@ export function FilterSheet({ selected, onSelect, getSource, onClose, customs, s
 
   const allItems = useMemo(
     () => [
-      ...PRESETS.map((p) => ({ id: p.id, label: p.label, group: p.group, custom: false, fx: p.fx })),
+      ...presets.map((p) => ({ id: p.id, label: p.label, group: p.group, custom: false, fx: p.fx })),
       ...customs.map((c) => ({ id: c.id, label: c.name, group: '커스텀', custom: true, fx: undefined })),
     ],
-    [customs],
+    [customs, presets],
   );
   const baseGroups = useMemo(() => [...new Set(allItems.map((p) => p.group))], [allItems]);
   const favSet = useMemo(() => new Set(favs), [favs]);
@@ -170,6 +171,7 @@ export function FilterSheet({ selected, onSelect, getSource, onClose, customs, s
               }}
             >
               <div className="sheet-group">{s.title}</div>
+              {s.title === '대표 룩 · 시험중' && <p className="sheet-group-note">기존 공개 색 LUT와 자체 필름 질감을 조합한 평가 후보예요. 새 LUT나 제조사 재현이 아니며 실제 사진 품질은 아직 미검증입니다. <a href="/luts/film/CREDITS.md" target="_blank" rel="noopener noreferrer">색 데이터 출처·라이선스</a></p>}
               {s.title === '필름 컬렉션' && <p className="sheet-group-note">실제 필름 색감을 근사하는 공개 LUT 6종이에요. 입자·렌즈 효과는 별도로 선택해요. 제조사 공식 LUT는 아닙니다. <a href="/luts/film/CREDITS.md" target="_blank" rel="noopener noreferrer">LUT 출처·라이선스</a></p>}
               {s.title === '빈티지 질감' && <p className="sheet-group-note">구형 디지캠은 저해상도·색 노이즈, 일회용 필름은 입자·빛 번짐, 인화사진은 바랜 색감이에요. 저장할 때 축소·압축 질감을 더합니다. 강도는 스튜디오의 ‘전체 룩’으로 조절해요.</p>}
               <div className="sheet-grid">

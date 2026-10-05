@@ -289,3 +289,14 @@ WebGL2 컨텍스트 위에 단일 풀스크린 삼각형 드로우로 모든 처
   끄고 안내를 닫으면 기존 카메라 미리보기로 돌아갈 수 있다.
 - seed 재현은 질감/색 편차의 재사용이지 최초 촬영본의 픽셀 단위 복원 약속이
   아니다. 원본 크롭·미용·JPEG·브라우저 차이가 결과에 영향을 줄 수 있다.
+
+## 선택형 필름 질감 (version 1)
+
+- `engine/filmQuality.ts`는 선택적 CameraSettings snapshot을 검증·해석한다. legacy/누락은 기존 모델, film-v2는 별도 RenderLook 채널이다. grain은 수동/프리셋/추가 입자를 합쳐 한 번만 처리하고 크기·시드·버전을 강도와 함께 축소하지 않는다.
+- `capture/useFilmQuality.ts`와 `capture/filmQuality.ts`는 `oc-film-quality-v1` 저장·경고를 관리한다. 손상·저장 거절 시 자동 덮어쓰기 없이 세션에서 조절하며 기존 사진·레시피는 자동 변환하지 않는다.
+- `filmGrain.ts`와 `filmShader.ts`는 기존 PRNG·셰이더 문자열을 바꾸지 않는 별도 모델이다. 새 GPU 프로그램은 필요할 때 만들며 같은 시드 타일을 재사용하고 컨텍스트 복구 시 다시 생성한다.
+- `signatureFilms.ts`는 불변 후보 ID/버전·색 source ID·질감 snapshot을 연결한다. `availablePresets()`는 평가 query의 추천 노출과 기존 유효 설정의 로드를 구분한다. 후보의 출처는 기존 색 데이터 기록을 따른다.
+- 촬영·재현상·편집 저장은 quality snapshot/effective seed를 보관한다. signature의 누락/손상 메타데이터는 missing-custom-LUT fallback과 다르게 원본·기록을 유지하고 거절한다.
+- `preview/filmTextureCompare.ts`는 동일 동결 원본의 색감·보정을 유지한 before/after를 순차 렌더한다. FX·뷰티·렌즈·날짜·추가 우연성은 제외하고 after에 새 모델만 적용한다. source/output은 작업별 소유하고 취소/해제 시 정리한다.
+- 스튜디오와 비교는 동시에 키보드 포커스/Escape를 소유하지 않는다. 썸네일 캐시 키에는 품질 모델·수치·시드·프로필 버전이 포함된다.
+- [검증 결과와 한계](signature-film-quality-verification.md), [후보 평가 상태](signature-film-evaluation.md)를 별도로 기록한다. 후속 인물·내 카메라·사진 스튜디오·필름롤은 별도 단계다.

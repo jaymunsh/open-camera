@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { PRESETS } from '../engine/lut';
+import { PRESETS, type Preset } from '../engine/lut';
 import { applyThumb, observePresetThumbs, type ThumbnailOptions } from './thumbs';
 
 const THUMB = 96;
@@ -16,6 +16,7 @@ interface Props {
   intensity?: number;
   onIntensity?: (v: number) => void;
   previewOptions?: ThumbnailOptions;
+  presets?: readonly Preset[];
 }
 
 export function FilterStrip({
@@ -30,6 +31,7 @@ export function FilterStrip({
   intensity = 1,
   onIntensity,
   previewOptions,
+  presets = PRESETS,
 }: Props) {
   const refs = useRef(new Map<HTMLCanvasElement, string>());
   const items = useRef(new Map<string, HTMLButtonElement>());
@@ -61,7 +63,7 @@ export function FilterStrip({
   };
 
   const thumbItems = [
-    ...PRESETS.map((p) => ({ id: p.id, fx: p.fx })),
+    ...presets.map((p) => ({ id: p.id, fx: p.fx })),
     ...customs.map((c) => ({ id: c.id, custom: true })),
   ];
 
@@ -122,7 +124,7 @@ export function FilterStrip({
         </div>
       )}
       <div className="strip" ref={strip}>
-        {PRESETS.map((p) => (
+        {presets.map((p) => (
           <button
             key={p.id}
             ref={(el) => {

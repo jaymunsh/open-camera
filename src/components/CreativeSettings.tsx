@@ -9,6 +9,7 @@ import { compositionPaper } from '../capture/paper';
 import { PRESETS, STUDIO_FILMS } from '../engine/lut';
 import { PAPERS } from '../capture/paper';
 import { StudioDisclosure } from './StudioDisclosure';
+import { signatureFilm } from '../engine/signatureFilms';
 
 export type CreativeOptions = Pick<CameraSettings, 'strengthMode' | 'gentle' | 'lens' | 'lensAmount'>;
 export const DEFAULT_CREATIVE: CreativeOptions = { strengthMode: 'color', gentle: false, lens: 'none', lensAmount: .5 };
@@ -33,7 +34,7 @@ export function CreativeSettings({ initialTab, mode, composition, boothMethod, b
 }) {
   const [tab, setTab] = useState(initialTab);
   const id = useId();
-  const filmLabel = selectedFilm === 'none' ? '원본' : PRESETS.find(film => film.id === selectedFilm)?.label ?? '사용자 필름';
+  const filmLabel = selectedFilm === 'none' ? '원본' : PRESETS.find(film => film.id === selectedFilm)?.label ?? signatureFilm(selectedFilm)?.label ?? '사용자 필름';
   const ratio = ratioIdx === 0 ? { w: 1, h: 1 } : ratioIdx === 1 ? { w: 4, h: 5 } : { w: 3, h: 4 };
   const ratioControls = <fieldset className="camera-field" disabled={ratioLocked}><legend>한 컷의 비율</legend><div className="camera-choices">{([[0, '1:1'], [2, '3:4'], [1, '4:5']] as const).map(([id, label]) => <button key={id} aria-pressed={ratioIdx === id} onClick={() => onRatio(id)}>{label}</button>)}</div></fieldset>;
   const boothControls = <BoothControls method={boothMethod} interval={boothInterval} locked={methodLocked} onMethod={onBoothMethod} onInterval={onBoothInterval} />;

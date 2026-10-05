@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-05-signature-film-quality-design.md`
 
-**Status:** 2026-10-05 설계서 승인, **이 구현 계획 검토 및 실행 방식 선택 대기**. 제품 코드·새 테스트 구현은 아직 시작하지 않았다.
+**Status:** 2026-10-05 사용자 진행 승인, Native 방식으로 Task 1–7 구현 및 단계별 검증을 진행했다. 최종 전체 회귀 검증·코드/UI 리뷰 진행 중. [구현/검증 기록](../../signature-film-quality-verification.md)을 기준으로 상태를 확인한다. 아래 체크리스트는 원 계획의 실행 계약이며 단계별 완료 근거는 실행 ledger와 커밋에 기록한다.
 
 ## Global Constraints
 
@@ -245,4 +245,4 @@ expect(qualityCacheHitsAfterParameterChange).toBe(0);
 
 추천은 **Native — 같은 세션에서 주 agent가 순서대로 구현**이다. resolver·GPU·촬영·UI가 밀접하게 연결돼 기존 App을 동시 편집할 이점이 작다. 대안은 Subagent-driven으로, 작업마다 worker와 reviewer가 교대하는 방식이며 독립 검토가 강하지만 작업별 context 비용이 늘어난다.
 
-사용자가 이 계획을 확인하고 실행 방식을 선택한 뒤 해당 실행 skill을 읽고 Task 1부터 시작한다. 아직 구현 대기이며 체크박스를 미리 완료 처리하지 않는다.
+사용자가 Native 실행을 승인해 같은 폴더에서 순서대로 진행했다. 기존 작업은 보존하며 각 단계는 실패 테스트·구현·통과 확인·로컬 커밋 뒤 완료 기록을 남긴다. 정식 배포·push는 별도 요청 대상이다.

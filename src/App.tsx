@@ -7,7 +7,7 @@ import { FilterSheet } from './components/FilterSheet';
 import { FilterStrip } from './components/FilterStrip';
 import { InstallHint } from './components/InstallHint';
 import { CustomLutsModal } from './components/CustomLutsModal';
-import { addCustomLut, listCustomLuts, loadCustomLut, loadPresetLut, loadSignatureCandidate, PRESETS, removeCustomLut, renameCustomLut, type CustomEntry } from './engine/lut';
+import { addCustomLut, availablePresets, listCustomLuts, loadCustomLut, loadPresetLut, loadSignatureCandidate, PRESETS, removeCustomLut, renameCustomLut, type CustomEntry } from './engine/lut';
 import { DEFAULT_FILM_QUALITY, FilmQualityError, assertFilmQualityForPreset, resolveFilmQuality } from './engine/filmQuality';
 import { createSignatureQuality, signatureFilm } from './engine/signatureFilms';
 import { useFilmQuality } from './capture/useFilmQuality';
@@ -117,6 +117,8 @@ const RATIOS = [
 ];
 
 export default function App() {
+  const [previewCandidates] = useState(() => new URLSearchParams(window.location.search).get('film-quality-preview') === '1');
+  const presets = useMemo(() => availablePresets(previewCandidates), [previewCandidates]);
   const [mode, setMode] = useState<Mode>('camera');
   const [panel, setPanel] = useState<Panel>('filters');
   const [params, setParams] = useState<FilterParams>(DEFAULT_PARAMS);
@@ -695,9 +697,10 @@ export default function App() {
   }, cameraRatio: ratio, cameraMirror: facing === 'user', sceneAvailable: mode === 'camera' && ready,
     editSource: mode === 'edit' && !reprocessRecord ? editSrc : null, editToken, reprocessRecord });
   const comparisonChoices = useMemo(() => [
-    ...PRESETS.map((preset) => ({ id: preset.id, label: preset.label, custom: false })),
+    ...presets.map((preset) => ({ id: preset.id, label: preset.label, custom: false })),
+    ...(!presets.some(preset => preset.id === lutId) && signatureFilm(lutId) ? [{ id: lutId, label: signatureFilm(lutId)!.label, custom: false }] : []),
     ...customs.map((custom) => ({ id: custom.id, label: custom.name, custom: true })),
-  ], [customs]);
+  ], [customs, presets, lutId]);
   const previewOptions = useMemo(() => ({ sampleId: preview.sourceKind === 'sample' ? preview.sampleId : undefined,
     source: preview.thumbnailSource, sourceVersion: preview.sourceKey, srcKey: preview.sourceKey, filmQuality: filmQuality.settings }), [preview.sourceKind, preview.sampleId, preview.thumbnailSource, preview.sourceKey, filmQuality.settings]);
   const openTextureComparison = async () => {
@@ -1259,7 +1262,7 @@ export default function App() {
   };
   const settingsSnapshot: SettingsSnapshot = {
     settings: generalSettings,
-    filterLabel: customs.find(c => c.id === lutId)?.name ?? PRESETS.find(p => p.id === lutId)?.label ?? '불러온 필름',
+    filterLabel: customs.find(c => c.id === lutId)?.name ?? PRESETS.find(p => p.id === lutId)?.label ?? signatureFilm(lutId)?.label ?? '불러온 필름',
     source: mode, captureMode: mode === 'edit' ? reprocessRecord?.mode ?? 'normal' : creative.mode,
     ratioLabel: mode === 'camera' ? ratio.label : reprocessRecord ? RATIOS[reprocessRecord.frameSettings?.[0]?.ratioIdx ?? reprocessRecord.settings?.ratioIdx ?? ratioIdx]?.label ?? '원본 비율' : '원본 비율',
     composition: mode === 'edit' && reprocessRecord?.composition ? reprocessRecord.composition : creative.options,
@@ -1277,7 +1280,7 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <span className={`filter-name${pendingLut ? ' pending' : ''}`}>
-          {customs.find((c) => c.id === lutId)?.name ?? PRESETS.find((p) => p.id === lutId)?.label}
+          {customs.find((c) => c.id === lutId)?.name ?? PRESETS.find((p) => p.id === lutId)?.label ?? signatureFilm(lutId)?.label}
         </span>
         <div className="header-btns">
           {creative.records[0] && <button className="recent-thumb" aria-label="최근 촬영 열기" disabled={busy || creative.working} onClick={() => { cancelCountdown(); creative.pause(); creative.setHistoryOpen(true); }}><BlobPhoto blob={creative.records[0].blob} alt="최근 촬영" /></button>}
@@ -1545,6 +1548,7 @@ export default function App() {
         />
       ) : panel === 'filters' ? (
         <FilterStrip
+          presets={presets}
           selected={lutId}
           onSelect={selectFilm}
           getSource={getSource}
@@ -1674,6 +1678,7 @@ export default function App() {
 
       {sheetOpen && (
         <FilterSheet
+          presets={presets}
           selected={lutId}
           onSelect={selectFilm}
           getSource={getSource}
