@@ -519,7 +519,7 @@ export class FilterPipeline {
     if (pattern && (!this.patternTex || this.patternSeed !== pattern.seed)) {
       const pixels = patternNoise(pattern.seed);
       const texture = gl.createTexture();
-      if (!texture) throw new Error('필름 패턴을 만들 수 없습니다');
+      if (!texture) throw new Error('필름 패턴을 만들지 못했어요. 스튜디오에서 빈티지 우연성을 꺼주세요.');
       if (this.patternTex) gl.deleteTexture(this.patternTex);
       this.patternTex = texture;
       this.patternSeed = pattern.seed;

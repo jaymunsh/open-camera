@@ -12,7 +12,7 @@ export function RecipeSheet({ settings, onApply, onClose }: { settings: CameraSe
   const [busy, setBusy] = useState(false);
   const change = (next: Recipe[]) => { try { writeRecipes(next); setRows(next); setError(null); } catch (e) { setError((e as Error).message); } };
   return <CameraDialog title="카메라 레시피" onClose={onClose} busy={busy}>
-    <p className="camera-note">필터·보정·날짜·렌즈·비율을 함께 저장합니다. 사진과 사용자 LUT 파일은 포함하지 않습니다.</p>
+    <p className="camera-note">필터·보정·날짜·렌즈·비율·추가 질감을 함께 저장합니다. 고정 패턴은 그대로, 매 컷 모드는 새로운 패턴으로 시작해요. 사진과 사용자 LUT 파일은 포함하지 않습니다.</p>
     <label className="camera-field">레시피 이름<input aria-label="레시피 이름" maxLength={40} value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 빨간 날짜 여행용" /></label>
     <button className="camera-primary" disabled={unreadable || !name.trim() || busy || rows.length >= 20} onClick={() => { const next = [{ version: 1 as const, id: crypto.randomUUID(), name: name.trim(), settings: structuredClone(settings) }, ...rows]; change(next); }}>현재 설정 저장</button>
     {error && <p role="alert" className="camera-warning">{error}</p>}

@@ -22,6 +22,7 @@ export function PhotoHistory({ records, warning, onClose, onDelete, onReprocess 
     {selected ? <>
       <BlobPhoto blob={selected.blob} className="history-large" alt="선택한 촬영 사진" />
       <p className="camera-note">{labels[selected.mode]} · {selected.width}×{selected.height} · {new Date(selected.createdAt).toLocaleString('ko-KR')}{selected.persisted === false ? ' · 이번 세션에만 보관' : ''}</p>
+      {!selected.originals.length && <p className="camera-note">원본을 보관하지 않은 사진은 다시 현상할 수 없어요.</p>}
       <div className="camera-actions">
         <button disabled={busy} onClick={() => setSelected(null)}>목록</button>
         <button disabled={busy} onClick={() => void run(() => saveImage(selected.blob, selected.name))}>다시 공유 / 저장</button>
