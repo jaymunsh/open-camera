@@ -66,6 +66,192 @@ async function inspect(page: Page) {
   return page.locator('.camera-info');
 }
 
+type ResumeWindow = Window & { beforeResumeTrack: MediaStreamTrack; cameraStartCount: number; startsBeforeSuspend: number };
+async function countCameraStarts(page: Page) {
+  await page.addInitScript(() => {
+    const probe = window as unknown as ResumeWindow;
+    probe.cameraStartCount = 0;
+    const getMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia = (constraints) => { probe.cameraStartCount++; return getMedia(constraints); };
+  });
+}
+async function suspendCamera(page: Page, bfcache = false) {
+  await page.evaluate((bfcache) => {
+    const video = document.querySelector('video')!;
+    const probe = window as unknown as ResumeWindow;
+    probe.beforeResumeTrack = (video.srcObject as MediaStream).getVideoTracks()[0];
+    probe.startsBeforeSuspend = probe.cameraStartCount;
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+    if (bfcache) window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
+  }, bfcache);
+}
+async function resumeCamera(page: Page, bfcache = false) {
+  await page.evaluate((bfcache) => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+    document.dispatchEvent(new Event('visibilitychange'));
+    if (bfcache) window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+  }, bfcache);
+}
+
+// These prove recovery behavior in the real App/hook, not iPhone optical FoV.
+test('front camera starts at the widest reported native zoom instead of assuming web 1 is wide', async ({ page }) => {
+  await cameraZoom(page, { min: .8, max: 5, step: .1 });
+  await front(page);
+  await expect(await inspect(page)).toContainText('현재 값 0.8');
+  await expect(page.locator('.zoombar')).toHaveCount(0);
+});
+
+for (const bfcache of [false, true]) {
+  test(`front camera reconnects after background${bfcache ? ' and BFCache' : ''} without losing selected zoom or ratio`, async ({ page }) => {
+    await cameraZoom(page, { min: .5, max: 5, step: .1 });
+    await countCameraStarts(page);
+    await front(page);
+    const selectedZoom = bfcache ? 1 : .5;
+    const selectedButton = page.locator('.zoombar button').filter({ hasText: bfcache ? /^1$/ : /^\.5$/ });
+    await selectedButton.click();
+    // A non-default ratio must survive recovery, not just the default 3:4.
+    await page.getByRole('button', { name: '비율', exact: true }).click();
+    const chosenRatio = await page.locator('.ratio-btn').textContent();
+    await suspendCamera(page, bfcache);
+    await expect(page.getByRole('button', { name: '촬영', exact: true })).toBeDisabled();
+    expect(await page.evaluate(() => (window as unknown as ResumeWindow).beforeResumeTrack.readyState)).toBe('ended');
+    await resumeCamera(page, bfcache);
+    await page.waitForFunction(() => {
+      const video = document.querySelector('video');
+      const track = (video?.srcObject as MediaStream | null)?.getVideoTracks()[0];
+      return video && video.currentTime > .1 && track?.readyState === 'live' && track !== (window as unknown as ResumeWindow).beforeResumeTrack;
+    });
+    await expect(page.getByRole('button', { name: '촬영', exact: true })).toBeEnabled();
+    await expect(page.locator('.ratio-btn')).toHaveText(chosenRatio!);
+    await expect(selectedButton).toHaveClass('on');
+    await expect(await inspect(page)).toContainText(`현재 값 ${selectedZoom}`);
+    expect(await page.evaluate(() => {
+      const probe = window as unknown as ResumeWindow;
+      return probe.cameraStartCount - probe.startsBeforeSuspend;
+    })).toBe(1);
+  });
+}
+
+test('front camera without a zoom API still replaces a suspended stream without inventing a zoom setting', async ({ page }) => {
+  await cameraZoom(page, null);
+  await front(page);
+  await suspendCamera(page);
+  expect(await page.evaluate(() => (window as unknown as ResumeWindow).beforeResumeTrack.readyState)).toBe('ended');
+  await resumeCamera(page);
+  await cameraFrame(page, 'user');
+  await expect(page.getByRole('button', { name: '촬영', exact: true })).toBeEnabled();
+  await expect(await inspect(page)).toContainText('현재 값 미제공');
+  await expect(page.locator('.zoombar')).toHaveCount(0);
+});
+
+test('back camera keeps its existing live-stream resume behavior', async ({ page }) => {
+  await cameraZoom(page, { min: .5, max: 5, step: .1 });
+  await countCameraStarts(page);
+  await page.goto('/');
+  await cameraFrame(page, 'environment');
+  await suspendCamera(page, true);
+  expect(await page.evaluate(() => (window as unknown as ResumeWindow).beforeResumeTrack.readyState)).toBe('live');
+  await resumeCamera(page, true);
+  await cameraFrame(page, 'environment');
+  expect(await page.evaluate(() => {
+    const probe = window as unknown as ResumeWindow;
+    return probe.cameraStartCount - probe.startsBeforeSuspend;
+  })).toBe(0);
+  await expect(page.getByRole('button', { name: '촬영', exact: true })).toBeEnabled();
+});
+
+test('back camera whose first frames arrive while hidden is usable on return without restarting', async ({ page }) => {
+  await cameraZoom(page, null);
+  await countCameraStarts(page);
+  await page.addInitScript(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+  });
+  await page.goto('/');
+  await cameraFrame(page, 'environment');
+  const starts = await page.evaluate(() => (window as unknown as ResumeWindow).cameraStartCount);
+  await resumeCamera(page);
+  await expect(page.getByRole('button', { name: '촬영', exact: true })).toBeEnabled();
+  expect(await page.evaluate(() => (window as unknown as ResumeWindow).cameraStartCount)).toBe(starts);
+});
+
+test('front camera recovers from pagehide/pageshow even without visibility events', async ({ page }) => {
+  await cameraZoom(page, null);
+  await front(page);
+  const previousTrack = await page.evaluateHandle(() => (document.querySelector('video')!.srcObject as MediaStream).getVideoTracks()[0]);
+  await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true })));
+  await expect(page.getByRole('button', { name: '촬영', exact: true })).toBeDisabled();
+  expect(await previousTrack.evaluate(track => track.readyState)).toBe('ended');
+  await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })));
+  await cameraFrame(page, 'user');
+  await expect(page.getByRole('button', { name: '촬영', exact: true })).toBeEnabled();
+  expect(await previousTrack.evaluate(track => track !== (document.querySelector('video')!.srcObject as MediaStream).getVideoTracks()[0])).toBe(true);
+});
+
+test('a delayed selfie request cannot replace the fresh stream after background recovery', async ({ page }) => {
+  await cameraZoom(page, null);
+  await page.addInitScript(() => {
+    const getMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    let holdFirstSelfie = true;
+    navigator.mediaDevices.getUserMedia = async constraints => {
+      const stream = await getMedia(constraints);
+      const facing = (constraints?.video as MediaTrackConstraints)?.facingMode;
+      if (typeof facing === 'object' && facing.ideal === 'user' && holdFirstSelfie) {
+        holdFirstSelfie = false;
+        await new Promise<void>(resolve => Object.assign(window, {
+          releaseDelayedSelfie: resolve, delayedSelfieTrack: stream.getVideoTracks()[0],
+        }));
+      }
+      return stream;
+    };
+  });
+  await page.goto('/');
+  await cameraFrame(page, 'environment');
+  await page.getByRole('button', { name: '카메라 전환', exact: true }).click();
+  await page.waitForFunction(() => 'releaseDelayedSelfie' in window);
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect(page.getByRole('button', { name: '촬영', exact: true })).toBeDisabled();
+  await resumeCamera(page);
+  await cameraFrame(page, 'user');
+  const freshTrack = await page.evaluateHandle(() => (document.querySelector('video')!.srcObject as MediaStream).getVideoTracks()[0]);
+  await page.evaluate(() => (window as unknown as { releaseDelayedSelfie: () => void }).releaseDelayedSelfie());
+  await page.waitForFunction(() => (window as unknown as { delayedSelfieTrack: MediaStreamTrack }).delayedSelfieTrack.readyState === 'ended');
+  expect(await freshTrack.evaluate(track => track === (document.querySelector('video')!.srcObject as MediaStream).getVideoTracks()[0])).toBe(true);
+  await expect(page.getByRole('button', { name: '촬영', exact: true })).toBeEnabled();
+});
+
+test('rapid return to background defers selfie recovery until visible and retains selected zoom', async ({ page }) => {
+  await cameraZoom(page, { min: .5, max: 5, step: .1 });
+  await countCameraStarts(page);
+  await front(page);
+  await page.locator('.zoombar button').filter({ hasText: /^1$/ }).click();
+  await suspendCamera(page);
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+    document.dispatchEvent(new Event('visibilitychange'));
+    // The nonce update is queued, but the page is hidden again before its effect runs.
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  // Wait for React's queued effect without relying on an arbitrary sleep.
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  expect(await page.evaluate(() => {
+    const probe = window as unknown as ResumeWindow;
+    return probe.cameraStartCount - probe.startsBeforeSuspend;
+  })).toBe(0);
+  await resumeCamera(page);
+  await cameraFrame(page, 'user');
+  await expect(page.getByRole('button', { name: '촬영', exact: true })).toBeEnabled();
+  await expect(page.locator('.zoombar button').filter({ hasText: /^1$/ })).toHaveClass('on');
+  await expect(await inspect(page)).toContainText('현재 값 1');
+});
+
 // Catches rear lens-count guesses leaking into the selfie presets. Returning
 // to the back camera must preserve its existing narrow/wide-screen shortcuts.
 for (const [width, rearTele] of [[390, '3'], [430, '5']] as const) {

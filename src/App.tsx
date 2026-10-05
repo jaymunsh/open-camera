@@ -20,7 +20,10 @@ import {
   type DateFmt,
   type DateSize,
 } from './engine/pipeline';
-import { DEFAULT_PARAMS, type FilterParams, type FxSpec, type LutData } from './engine/types';
+import { DEFAULT_PARAMS, type FilmPattern, type FilterParams, type FxSpec, type LutData } from './engine/types';
+import { DEFAULT_VARIATION, nextPattern, resolveVariation, validateVariation } from './engine/variation';
+import { useFilmVariation } from './capture/useFilmVariation';
+import { makeFramePatterns, validateFramePatterns } from './capture/variation';
 import { loadImageFile, timestampName } from './utils/image';
 import {
   blinkOf,
@@ -42,12 +45,14 @@ import type { CameraSettings, CapturedFrame, CaptureRecord, StampStyle } from '.
 import { validateSettings } from './capture/recipes';
 import { renderReprocessed, exportReprocessed } from './capture/reprocess';
 import { CreativeSettings, DEFAULT_CREATIVE, type StudioTab } from './components/CreativeSettings';
+import { StudioFramePreview, type StudioCaptureInputs } from './components/StudioFramePreview';
 import { RecipeSheet } from './components/RecipeSheet';
 import { BlobPhoto, PhotoHistory } from './components/PhotoHistory';
 import { CaptureWorkspace } from './components/CaptureWorkspace';
 import { CapturePreview, type PreviewDraw, type PreviewSize } from './components/CapturePreview';
 import { LensComparison } from './components/LensComparison';
 import { CameraInfo } from './components/CameraInfo';
+import { FilmVariationControls } from './components/FilmVariationControls';
 
 type Mode = 'camera' | 'edit';
 type Panel = 'filters' | 'adjust' | 'beauty';
@@ -114,6 +119,9 @@ export default function App() {
   const [ratioIdx, setRatioIdx] = useState(2);
   const [compositeRatioIdx, setCompositeRatioIdx] = useState(2);
   const [lensPreviewSource, setLensPreviewSource] = useState<HTMLCanvasElement | null>(null);
+  const [studioPreviewSource, setStudioPreviewSource] = useState<HTMLCanvasElement | null>(null);
+  const [studioCaptureInputs, setStudioCaptureInputs] = useState<StudioCaptureInputs>();
+  const [studioOpenedAt, setStudioOpenedAt] = useState(0);
   const compositeDrawRef = useRef<PreviewDraw>(null);
   const [gridOn, setGridOn] = useState(() => localStorage.getItem('oc-grid') === '1');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -145,13 +153,15 @@ export default function App() {
   const [keepOriginal, setKeepOriginal] = useState(() => localStorage.getItem('oc-keep-original') === '1');
   const [dateStyle, setDateStyle] = useState<StampStyle>(() => localStorage.getItem('oc-datestyle') === 'red' ? 'red' : 'amber');
   const [reprocessRecord, setReprocessRecord] = useState<CaptureRecord | null>(null);
+  const variation = useFilmVariation();
+  const [editPatterns, setEditPatterns] = useState<(FilmPattern | null)[] | undefined>();
   const captureFrameRef = useRef<(() => Promise<CapturedFrame>) | null>(null);
   const creative = useCreativeCapture(() => captureFrameRef.current!(), setGlError);
-  const tiledMode = creative.mode === 'half' || creative.mode === 'booth';
-  const captureRatioIdx = creative.mode !== 'normal' && creative.frames.length ? creative.frames[0].settings.ratioIdx : tiledMode ? compositeRatioIdx : ratioIdx;
+  const tiledMode = creative.mode === 'half' || creative.mode === 'booth' || creative.mode === 'instant';
+  const captureRatioIdx = creative.mode !== 'normal' && creative.frames.length ? creative.frames[0].settings.ratioIdx : creative.mode === 'instant' ? creative.options.instantFormat === 'portrait' ? 2 : 0 : tiledMode ? compositeRatioIdx : ratioIdx;
   const ratio = RATIOS[captureRatioIdx];
   const cameraActive = mode === 'camera' && !creative.review && !creative.historyOpen;
-  const generalSettings: CameraSettings = { lutId, intensity: lutIntensity, params: { ...params }, beauty: { ...beauty }, ratioIdx, grainOff, ...creativeOptions, date: { mode: dateMode, fmt: dateFmt, size: dateSize, orient: dateOrient, style: dateStyle } };
+  const generalSettings: CameraSettings = { lutId, intensity: lutIntensity, params: { ...params }, beauty: { ...beauty }, ratioIdx, grainOff, variation: { ...variation.settings }, ...creativeOptions, date: { mode: dateMode, fmt: dateFmt, size: dateSize, orient: dateOrient, style: dateStyle } };
   const gentleAvailable = PRESETS.find((p) => p.id === lutId)?.group !== '디지캠' && !!PRESETS.find((p) => p.id === lutId)?.fx;
   const look: RenderLook = { lens: creativeOptions.lens, lensAmount: creativeOptions.lensAmount, gentle: creativeOptions.gentle && gentleAvailable };
   const lookRef = useRef(look); lookRef.current = look;
@@ -289,7 +299,7 @@ export default function App() {
   const paramsDirty = (Object.keys(DEFAULT_PARAMS) as (keyof FilterParams)[]).some(
     (k) => params[k] !== DEFAULT_PARAMS[k],
   );
-  const canCompare = beautyOn || paramsDirty || lutId !== 'none' || creativeOptions.lens !== 'none';
+  const canCompare = beautyOn || paramsDirty || lutId !== 'none' || creativeOptions.lens !== 'none' || variation.settings.mode !== 'off';
   const faceNeed = beautyOn || !!(PRESETS.find((p) => p.id === lutId)?.fx?.redeye ?? 0);
   useEffect(() => {
     if (!faceNeed || (mode === 'camera' && !cameraActive)) {
@@ -460,15 +470,17 @@ export default function App() {
 
   const showDate = dateMode === 'on' || (dateMode === 'auto' && !!applied.fx?.date);
   const renderReady = lutReady && applied.key === `preset-${lutId}` && applied.lut === (lutId === 'none' ? null : loadedLuts[lutId]) && applied.amount === (lutId === 'none' ? 0 : lutIntensity);
+  const previewPattern = mode === 'edit' && editPatterns ? editPatterns.at(-1) ?? null : variation.pattern;
+  const resolvedPreview = useMemo(() => resolveVariation(params, applied.fx, previewPattern ? variation.settings : DEFAULT_VARIATION, previewPattern, grainOff), [params, applied.fx, variation.settings, previewPattern, grainOff]);
 
-  const paramsRef = useRef(params);
-  paramsRef.current = params;
+  const paramsRef = useRef(resolvedPreview.params);
+  paramsRef.current = resolvedPreview.params;
   const editSettingsRef = useRef({ params, lutId, lutIntensity });
   editSettingsRef.current = { params, lutId, lutIntensity };
   const beautyRef = useRef(beauty);
   beautyRef.current = beauty;
   const lutRef = useRef(applied);
-  lutRef.current = applied;
+  lutRef.current = { ...applied, fx: resolvedPreview.fx };
   const facingRef = useRef(facing);
   facingRef.current = facing;
   const ratioRef = useRef(ratio);
@@ -565,6 +577,7 @@ export default function App() {
       const v = videoRef.current;
       const p = getPipe();
       if (p && v && v.readyState >= 2) {
+        try {
         applyBeauty(p, compareRef.current);
         p.setSource(v);
         const l = lutRef.current;
@@ -584,6 +597,7 @@ export default function App() {
         });
         // Copy before the browser clears the non-preserved WebGL drawing buffer.
         if (canvasRef.current) compositeDrawRef.current?.(canvasRef.current);
+        } catch (e) { setGlError(e instanceof Error ? e.message : '미리보기를 만들지 못했어요. 스튜디오에서 빈티지 우연성을 꺼주세요.'); }
       }
       raf = requestAnimationFrame(tick);
     };
@@ -599,7 +613,7 @@ export default function App() {
     if (reprocessRecord && reprocessRecord.mode !== 'normal' && !compare) {
       let live = true;
       const abort = new AbortController();
-      void renderReprocessed(reprocessRecord, { ...generalSettings, gentle: look.gentle }, applied.lut, applied.fx, false, abort.signal).then((source) => {
+      void renderReprocessed(reprocessRecord, { ...generalSettings, gentle: look.gentle }, applied.lut, applied.fx, false, abort.signal, editPatterns ? { patterns: editPatterns } : undefined).then((source) => {
         if (!live) return;
         p.setBeautyMask(null, DEFAULT_BEAUTY); p.setWarpMap(null); maskDirty.current = true; warpDirty.current = true;
         p.setSource(source); p.setLUT(null, null); p.render(DEFAULT_PARAMS, 0, { fit: 'contain', fx: null });
@@ -609,13 +623,13 @@ export default function App() {
     applyBeauty(p, compare);
     p.setSource(editSrc);
     p.setLUT(applied.key, applied.lut);
-    p.render(compare ? DEFAULT_PARAMS : params, compare ? 0 : applied.amount, {
+    try { p.render(compare ? DEFAULT_PARAMS : resolvedPreview.params, compare ? 0 : applied.amount, {
       fit: 'contain',
-      fx: compare ? null : applied.fx,
+      fx: compare ? null : resolvedPreview.fx,
       look: compare ? undefined : look,
       eyes: !compare && (applied.fx?.redeye ?? 0) > 0.001 ? eyePoints(getSmoothedFaces()) : undefined,
-    });
-  }, [mode, editSrc, params, applied, compare, getPipe, sizeTick, beauty, beautyTick, creativeOptions, look.gentle, reprocessRecord, renderReady]);
+    }); } catch (e) { setGlError(e instanceof Error ? e.message : '미리보기를 만들지 못했어요. 스튜디오에서 빈티지 우연성을 꺼주세요.'); }
+  }, [mode, editSrc, params, applied, compare, getPipe, sizeTick, beauty, beautyTick, creativeOptions, look.gentle, reprocessRecord, renderReady, variation.settings, variation.pattern, editPatterns]);
 
   const getSource = useCallback((): TexImageSource | null => {
     if (mode === 'camera') {
@@ -632,6 +646,7 @@ export default function App() {
       const src = await loadImageFile(f);
       creative.cancel();
       setReprocessRecord(null);
+      setEditPatterns(undefined);
       setEditSrc(src);
       setEditToken((t) => t + 1);
       setMode('edit');
@@ -640,7 +655,10 @@ export default function App() {
     }
   }, [confirmEditEntry, creative.cancel]);
 
-  const applyCameraSettings = async (value: CameraSettings) => {
+  const updateEditVariation = (preferences: typeof variation.settings) => {
+    setReprocessRecord(record => record ? { ...record, frameSettings: record.originals.map((_, index) => ({ ...(record.frameSettings?.[index] ?? generalSettings), variation: { ...preferences } })) } : record);
+  };
+  const applyCameraSettings = async (value: CameraSettings, restoredPatterns?: (FilmPattern | null)[]) => {
     const s = validateSettings(value);
     if (s.lutId !== 'none' && !PRESETS.some((p) => p.id === s.lutId) && !customs.some((c) => c.id === s.lutId)) throw new Error('이 레시피의 사용자 LUT가 없습니다. LUT를 다시 가져와주세요.');
     if (s.lutId !== 'none' && !loadedLuts[s.lutId]) {
@@ -651,11 +669,46 @@ export default function App() {
     setLutId(s.lutId); setLutIntensity(s.intensity); setParams(s.params); setBeauty(s.beauty); setGrainOff(s.grainOff); setRatioIdx(s.ratioIdx);
     setCreativeOptions({ strengthMode: s.strengthMode, gentle: s.gentle, lens: s.lens, lensAmount: s.lensAmount });
     setDateMode(s.date.mode); setDateFmt(s.date.fmt); setDateSize(s.date.size); setDateOrient(s.date.orient); setDateStyle(s.date.style);
+    if (restoredPatterns) variation.apply(validateVariation(s.variation), [...restoredPatterns].reverse().find(p => p !== null) ?? null);
+    else {
+      const preferences = validateVariation(s.variation);
+      if (reprocessRecord) { const patterns = makeFramePatterns(preferences, reprocessRecord.originals.length, editPatterns); setEditPatterns(patterns); updateEditVariation(preferences); variation.apply(preferences, patterns.at(-1) ?? null); }
+      else variation.apply(preferences);
+    }
+  };
+
+  const changeVariation = (preferences: typeof variation.settings) => {
+    if (busy || creative.working || creative.locked) return;
+    if (reprocessRecord) updateEditVariation(preferences);
+    if (reprocessRecord && (preferences.mode === 'off' || preferences.mode !== variation.settings.mode || preferences.fixedSeed !== variation.settings.fixedSeed || !editPatterns)) {
+      const patterns = makeFramePatterns(preferences, reprocessRecord.originals.length, editPatterns);
+      setEditPatterns(patterns); variation.apply(preferences, patterns.at(-1) ?? null);
+    } else variation.update(preferences);
+  };
+  const rerollVariation = () => {
+    if (busy || creative.working || creative.locked) return;
+    if (!reprocessRecord) { variation.reroll(); return; }
+    const seed = nextPattern(editPatterns?.at(-1) ?? variation.pattern).seed;
+    const preferences = { ...variation.settings, mode: variation.settings.mode === 'off' ? 'new' as const : variation.settings.mode, ...(variation.settings.mode === 'fixed' ? { fixedSeed: seed } : {}) };
+    const patterns = makeFramePatterns(preferences, reprocessRecord.originals.length, editPatterns);
+    setEditPatterns(patterns); updateEditVariation(preferences); variation.apply(preferences, patterns.at(-1) ?? null);
+  };
+  const freezeVariation = () => {
+    if (busy || creative.working || creative.locked) return;
+    if (!reprocessRecord) { variation.freeze(); return; }
+    const pattern = editPatterns ? editPatterns.at(-1) ?? nextPattern(variation.pattern) : variation.pattern ?? nextPattern();
+    const preferences = { ...variation.settings, mode: 'fixed' as const, fixedSeed: pattern.seed };
+    setEditPatterns(makeFramePatterns(preferences, reprocessRecord.originals.length)); updateEditVariation(preferences); variation.apply(preferences, pattern);
   };
 
   const reprocessPhoto = async (record: CaptureRecord) => {
     if (!confirmEditEntry()) return;
     if (!record.originals.length) throw new Error('이 사진에는 보관한 원본이 없습니다');
+    const restoredPatterns = validateFramePatterns(record);
+    const frameSettings = record.originals.map((_, index) => validateSettings({ ...(record.frameSettings?.[index] ?? record.settings ?? generalSettings), variation: validateVariation(record.frameSettings?.[index]?.variation ?? record.settings?.variation) }));
+    const reverseActiveIndex = restoredPatterns ? [...restoredPatterns].reverse().findIndex(p => p !== null) : -1;
+    const activeIndex = restoredPatterns && reverseActiveIndex >= 0 ? restoredPatterns.length - 1 - reverseActiveIndex : -1;
+    const restoredVariation = activeIndex >= 0 ? frameSettings[activeIndex].variation! : { ...validateVariation(record.settings?.variation), mode: 'off' as const };
     const sources: HTMLCanvasElement[] = [];
     for (const blob of record.originals) {
       const bitmap = await createImageBitmap(blob);
@@ -664,11 +717,13 @@ export default function App() {
     }
     const source = record.mode === 'normal' ? sources[0] : composeFrames(sources, record.mode, record.composition ?? {});
     if (record.settings) {
-      try { await applyCameraSettings({ ...record.settings, beauty: { ...DEFAULT_BEAUTY } }); }
-      catch { setLutId('none'); setParams(DEFAULT_PARAMS); setBeauty(DEFAULT_BEAUTY); setCreativeOptions(DEFAULT_CREATIVE); showToast('촬영 필터가 없어 원본에서 시작합니다'); }
+      try { await applyCameraSettings({ ...record.settings, variation: restoredVariation, beauty: { ...DEFAULT_BEAUTY } }, restoredPatterns); }
+      catch { setLutId('none'); setParams(DEFAULT_PARAMS); setBeauty(DEFAULT_BEAUTY); setCreativeOptions(DEFAULT_CREATIVE); variation.apply(DEFAULT_VARIATION); showToast('촬영 필터가 없어 원본에서 시작합니다'); }
     }
+    if (!record.settings) variation.apply(restoredVariation, restoredPatterns ? [...restoredPatterns].reverse().find(p => p !== null) ?? null : null);
+    setEditPatterns(restoredPatterns);
     creative.cancel();
-    setReprocessRecord(record); setEditSrc(source); setEditToken((t) => t + 1); setMode('edit'); setPanel('filters'); creative.setHistoryOpen(false);
+    setReprocessRecord({ ...record, frameSettings }); setEditSrc(source); setEditToken((t) => t + 1); setMode('edit'); setPanel('filters'); creative.setHistoryOpen(false);
   };
 
   captureFrameRef.current = async () => {
@@ -678,14 +733,19 @@ export default function App() {
     const s = structuredClone(creative.mode === 'booth' && creative.frames.length ? creative.frames[0].settings : generalSettings);
     s.ratioIdx = captureRatioIdx;
     const activeGentle = s.gentle && PRESETS.find((p) => p.id === s.lutId)?.group !== '디지캠';
-    const fx = creative.mode === 'booth' && creative.frames.length ? creative.frames[0].fx : deriveFx(PRESETS.find((p) => p.id === s.lutId)?.fx ? { ...PRESETS.find((p) => p.id === s.lutId)!.fx, grain: s.grainOff ? 0 : PRESETS.find((p) => p.id === s.lutId)!.fx?.grain, seed: fxSeedRef.current } : null, s.intensity, s.strengthMode, activeGentle);
+    const baseFx = deriveFx(PRESETS.find((p) => p.id === s.lutId)?.fx ? { ...PRESETS.find((p) => p.id === s.lutId)!.fx, grain: s.grainOff ? 0 : PRESETS.find((p) => p.id === s.lutId)!.fx?.grain, seed: fxSeedRef.current } : null, s.intensity, s.strengthMode, activeGentle);
+    const preferences = validateVariation(s.variation);
+    const pattern = preferences.mode === 'off' ? null : preferences.mode === 'fixed' ? { version: 1 as const, seed: preferences.fixedSeed } : variation.pattern ?? nextPattern();
+    const resolved = resolveVariation(s.params, baseFx, preferences, pattern, s.grainOff);
+    const fx = resolved.fx;
     const frozen = snapshotFrame(v, null, false, 2048);
     const createdAt = Date.now();
     const original = keepOriginal ? snapshotFrame(frozen, ratio, facing === 'user', 2048) : null;
-    const rendered = await renderFilteredCanvas(frozen, s.params, `preset-${s.lutId}`, s.lutId === 'none' ? null : loadedLuts[s.lutId], s.lutId === 'none' ? 0 : s.intensity, facing === 'user', ratio, fx, beautyMask.current, s.beauty,
+    const rendered = await renderFilteredCanvas(frozen, resolved.params, `preset-${s.lutId}`, s.lutId === 'none' ? null : loadedLuts[s.lutId], s.lutId === 'none' ? 0 : s.intensity, facing === 'user', ratio, fx, beautyMask.current, s.beauty,
       warpGpuFail.current && lastSrcSize.current ? drawWarpField(getSmoothedFaces(), lastSrcSize.current.w, lastSrcSize.current.h, { eye: s.beauty.eye, slim: s.beauty.slim, nose: s.beauty.nose, head: s.beauty.head }) : warpPairs.current,
       (fx?.redeye ?? 0) > .001 ? eyePoints(getSmoothedFaces()) : [], { on: false, fmt: s.date.fmt, size: s.date.size, orient: s.date.orient }, { lens: s.lens, lensAmount: s.lensAmount, gentle: activeGentle });
-    return { canvas: rendered, original, settings: s, createdAt, fx };
+    variation.commitShot(pattern);
+    return { canvas: rendered, original, settings: s, createdAt, fx, pattern };
   };
 
   const actionLock = useRef(false);
@@ -699,19 +759,21 @@ export default function App() {
     try {
       const createdAt = Date.now();
       const settings = structuredClone(generalSettings);
-      const frozen = keepOriginal ? snapshotFrame(v, null, false) : v;
+      const pattern = variation.pattern;
+      const resolved = resolveVariation(settings.params, applied.fx, variation.settings, pattern, grainOff);
+      const frozen = keepOriginal || pattern ? snapshotFrame(v, null, false) : v;
       const original = keepOriginal ? snapshotFrame(frozen, ratio, facing === 'user') : null;
       const size = srcSize(frozen);
       const output = exportSize(size.w, size.h, ratio);
       const blob = await exportFiltered(
         frozen,
-        params,
+        resolved.params,
         applied.key,
         applied.lut,
         applied.amount,
         facing === 'user',
         ratio,
-        applied.fx,
+        resolved.fx,
         beautyMask.current,
         beauty,
         warpGpuFail.current && lastSrcSize.current
@@ -726,8 +788,9 @@ export default function App() {
         { on: showDate, fmt: dateFmt, size: dateSize, orient: dateOrient, style: dateStyle },
         look,
       );
+      variation.commitShot(pattern);
       const name = timestampName();
-      void creative.remember({ id: crypto.randomUUID(), createdAt, blob, name, width: output.w, height: output.h, mode: 'normal', originals: [], settings }, original ? Promise.all([canvasBlob(original)]) : undefined);
+      void creative.remember({ id: crypto.randomUUID(), createdAt, blob, name, width: output.w, height: output.h, mode: 'normal', originals: [], settings, ...(pattern ? { framePatterns: [{ ...pattern }] } : {}) }, original ? Promise.all([canvasBlob(original)]) : undefined);
       const r = await saveImage(blob, name);
       if (r === 'shared' || r === 'downloaded') showToast('저장됨');
     } catch (e) {
@@ -736,7 +799,7 @@ export default function App() {
       actionLock.current = false;
       setBusy(false);
     }
-  }, [busy, facing, params, applied, videoRef, ratio, showToast, beauty, showDate, dateFmt, dateSize, dateOrient, dateStyle, creativeOptions, keepOriginal, creative.remember, grainOff, ratioIdx]);
+  }, [busy, facing, params, applied, videoRef, ratio, showToast, beauty, showDate, dateFmt, dateSize, dateOrient, dateStyle, creativeOptions, keepOriginal, creative.remember, grainOff, ratioIdx, variation.settings, variation.pattern]);
 
   const shutterAction = useRef<() => void>(() => {});
   shutterAction.current = () => { if (creative.mode === 'normal') void capture(); else void creative.shoot(); };
@@ -770,16 +833,18 @@ export default function App() {
     if (!editSrc || busy || !renderReady) return;
     setBusy(true);
     try {
-      const compositeResult = reprocessRecord && reprocessRecord.mode !== 'normal' ? await exportReprocessed(reprocessRecord, { ...generalSettings, gentle: look.gentle }, applied.lut, applied.fx) : null;
+      const savedSettings = structuredClone(generalSettings);
+      const savedPatterns = editPatterns?.map(p => p ? { ...p } : null);
+      const compositeResult = reprocessRecord && reprocessRecord.mode !== 'normal' ? await exportReprocessed(reprocessRecord, { ...savedSettings, gentle: look.gentle }, applied.lut, applied.fx, savedPatterns ? { patterns: savedPatterns } : undefined) : null;
       const blob = compositeResult?.blob ?? await exportFiltered(
         editSrc,
-        params,
+        resolvedPreview.params,
         applied.key,
         applied.lut,
         applied.amount,
         false,
         null,
-        applied.fx,
+        resolvedPreview.fx,
         beautyMask.current,
         beauty,
         warpGpuFail.current && lastSrcSize.current
@@ -795,7 +860,7 @@ export default function App() {
         look,
       );
       const name = timestampName();
-      if (reprocessRecord) { const size = srcSize(compositeResult?.canvas ?? editSrc); void creative.remember({ id: crypto.randomUUID(), createdAt: Date.now(), shotAt: reprocessRecord.shotAt ?? reprocessRecord.createdAt, blob, name, width: size.w, height: size.h, mode: reprocessRecord.mode, originals: keepOriginal ? [...reprocessRecord.originals] : [], settings: structuredClone(generalSettings), composition: reprocessRecord.composition }); }
+      if (reprocessRecord) { const size = srcSize(compositeResult?.canvas ?? editSrc); void creative.remember({ id: crypto.randomUUID(), createdAt: Date.now(), shotAt: reprocessRecord.shotAt ?? reprocessRecord.createdAt, blob, name, width: size.w, height: size.h, mode: reprocessRecord.mode, originals: keepOriginal ? [...reprocessRecord.originals] : [], settings: savedSettings, frameSettings: reprocessRecord.frameSettings?.map(frame => ({ ...structuredClone(savedSettings), variation: validateVariation(frame.variation) })), ...(savedPatterns ? { framePatterns: savedPatterns } : {}), composition: reprocessRecord.composition }); }
       const r = await saveImage(blob, name);
       if (r === 'shared' || r === 'downloaded') showToast('저장됨');
     } catch (e) {
@@ -803,7 +868,7 @@ export default function App() {
     } finally {
       setBusy(false);
     }
-  }, [busy, editSrc, params, applied, showToast, beauty, showDate, dateFmt, dateSize, dateOrient, dateStyle, creativeOptions, reprocessRecord, creative.remember, keepOriginal, renderReady]);
+  }, [busy, editSrc, params, applied, showToast, beauty, showDate, dateFmt, dateSize, dateOrient, dateStyle, creativeOptions, reprocessRecord, creative.remember, keepOriginal, renderReady, variation.settings, variation.pattern, editPatterns, grainOff]);
 
   const importLut = useCallback(
     async (files: File[]) => {
@@ -987,6 +1052,16 @@ export default function App() {
     cancelCountdown(); creative.pause();
     const source = getSource();
     setLensPreviewSource(source ? snapshotFrame(source, mode === 'camera' ? ratio : null, mode === 'camera' && facing === 'user', 512) : null);
+    setStudioPreviewSource(source ? snapshotFrame(source, null, false, 768) : null);
+    const warp = warpGpuFail.current && lastSrcSize.current ? drawWarpField(getSmoothedFaces(), lastSrcSize.current.w, lastSrcSize.current.h, { eye: beauty.eye, slim: beauty.slim, nose: beauty.nose, head: beauty.head }) : warpPairs.current;
+    setStudioCaptureInputs(source ? {
+      mirror: mode === 'camera' && facing === 'user',
+      mask: beautyMask.current ? snapshotFrame(beautyMask.current, null, false, 768) : null,
+      beauty: { ...beauty },
+      warp: warp instanceof Float32Array ? warp.slice() : warp ? snapshotFrame(warp, null) : null,
+      eyes: eyePoints(getSmoothedFaces()).map((eye) => ({ ...eye })),
+    } : undefined);
+    setStudioOpenedAt(Date.now());
     setStudioTab(tab); setMenuOpen(false); setCreativeOpen(true);
   };
 
@@ -1003,7 +1078,7 @@ export default function App() {
               <button
                 className="icon-btn ratio-btn"
                 disabled={busy || creative.working || (creative.mode !== 'normal' && creative.frames.length > 0)}
-                onClick={() => tiledMode ? setCompositeRatioIdx((i) => [0, 2, 1][([0, 2, 1].indexOf(i) + 1) % 3]) : setRatioIdx((i) => (i + 1) % RATIOS.length)}
+                onClick={() => creative.mode === 'instant' ? creative.setOptions({ ...creative.options, instantFormat: creative.options.instantFormat === 'portrait' ? 'square' : 'portrait' }) : tiledMode ? setCompositeRatioIdx((i) => [0, 2, 1][([0, 2, 1].indexOf(i) + 1) % 3]) : setRatioIdx((i) => (i + 1) % RATIOS.length)}
                 aria-label="비율"
               >
                 {ratio.label}
@@ -1135,11 +1210,11 @@ export default function App() {
       >
         <canvas ref={canvasRef} />
         <video ref={videoRef} playsInline muted autoPlay onLoadedData={onLoaded} />
-        {mode === 'camera' && (creative.mode === 'half' || creative.mode === 'booth') && sourceFrameRect && !creative.review && <CapturePreview mode={creative.mode} frames={creative.frames} options={creative.options} nextIndex={creative.nextIndex} countdown={creative.countdown} gridOn={gridOn} ratio={ratio} sourceRect={sourceFrameRect} viewSize={viewSize} drawRef={compositeDrawRef} size={capturePreviewSize} onSize={setCapturePreviewSize} bottomInset={canCompare || showDate || (ready && zoomCaps && zoomOptions.length > 1) ? 68 : 12} />}
+        {mode === 'camera' && (creative.mode === 'half' || creative.mode === 'booth' || creative.mode === 'instant') && sourceFrameRect && !creative.review && <CapturePreview mode={creative.mode} frames={creative.frames} options={creative.options} nextIndex={creative.nextIndex} countdown={creative.countdown} gridOn={gridOn} ratio={ratio} sourceRect={sourceFrameRect} viewSize={viewSize} drawRef={compositeDrawRef} size={capturePreviewSize} onSize={setCapturePreviewSize} bottomInset={canCompare || showDate || (ready && zoomCaps && zoomOptions.length > 1) ? 68 : 12} />}
         {mode === 'camera' && tiledMode && creative.countdown !== null && sourceFrameRect && <span className="capture-countdown" aria-hidden="true" style={{ left: sourceFrameRect.left + sourceFrameRect.w / 2, top: sourceFrameRect.top + sourceFrameRect.h / 2 }}>{creative.countdown}</span>}
         {mode === 'camera' && guideImage && frameRect && !creative.review && <img className="exposure-guide" src={guideImage} alt="첫 촬영 구도 안내" style={{ left: frameRect.left, top: frameRect.top, width: frameRect.w, height: frameRect.h }} />}
         {mode === 'camera' && creative.mode !== 'normal' && <div className="capture-progress" role="status" onPointerDown={(e) => e.stopPropagation()}>
-          <span>{creative.mode === 'half' ? '하프프레임' : creative.mode === 'booth' ? '네 컷' : '다중노출'} · {Math.min(creative.nextIndex + 1, creative.target)}/{creative.target}{creative.countdown !== null && <span className="progress-countdown"> · {creative.countdown}초</span>}</span>
+          <span>{creative.mode === 'half' ? '하프프레임' : creative.mode === 'booth' ? '네 컷' : creative.mode === 'instant' ? '즉석사진' : '다중노출'} · {Math.min(creative.nextIndex + 1, creative.target)}/{creative.target}{creative.countdown !== null && <span className="progress-countdown"> · {creative.countdown}초</span>}</span>
           {creative.mode === 'booth' && <div className="booth-method" role="group" aria-label="네 컷 촬영 방식">{([['auto', '자동'], ['manual', '수동']] as const).map(([method, label]) => <button key={method} aria-pressed={creative.boothMethod === method} disabled={creative.frames.length > 0 || creative.working} onClick={() => creative.changeBoothMethod(method)}>{label}</button>)}</div>}
           {creative.mode === 'booth' && creative.boothMethod === 'auto' && creative.frames.length > 0 && creative.frames.length < 4 && creative.retakeIndex === null && <button disabled={creative.working} onClick={creative.paused ? creative.resume : creative.pause}>{creative.paused ? '계속 촬영' : '일시정지'}</button>}
           {creative.frames.length > 0 && <button disabled={creative.working} onClick={() => { cancelCountdown(); creative.cancel(); }}>취소</button>}
@@ -1469,6 +1544,18 @@ export default function App() {
         mode={creative.mode}
         composition={creative.options}
         boothMethod={creative.boothMethod}
+        boothInterval={creative.boothInterval}
+        onBoothInterval={creative.changeBoothInterval}
+        onComposition={creative.setOptions}
+        framePreview={<StudioFramePreview source={studioPreviewSource} frames={creative.mode === 'booth' || creative.mode === 'instant' ? creative.frames : []} options={creative.options} mode={creative.mode === 'instant' ? 'instant' : 'booth'} ratio={RATIOS[tiledMode ? captureRatioIdx : compositeRatioIdx]!} params={resolvedPreview.params} lut={applied.lut} lutKey={applied.key} amount={applied.amount} fx={resolvedPreview.fx} look={look} ready={renderReady} inputs={studioCaptureInputs} date={{ on: showDate, fmt: dateFmt, size: dateSize, orient: dateOrient, style: dateStyle, timestamp: creative.frames.at(-1)?.createdAt ?? studioOpenedAt }} />}
+        variationControls={<FilmVariationControls settings={variation.settings} locked={busy || creative.working || creative.locked || pendingLut} warning={variation.warning} writable={variation.writable} notice={reprocessRecord ? `다른 패턴은 전체 컷에 적용해요. 고정하면 마지막 컷의 패턴을 전체 컷에 사용해요.${editPatterns?.at(-1) === null ? ' 마지막 컷에 패턴이 없으면 새 패턴으로 고정해요.' : ''}` : undefined} onChange={changeVariation} onReroll={rerollVariation} onFreeze={freezeVariation} onSaveRecipe={() => { setCreativeOpen(false); setRecipeOpen(true); }} onReset={() => { variation.resetStored(); if (reprocessRecord) { setEditPatterns(Array(reprocessRecord.originals.length).fill(null)); updateEditVariation(DEFAULT_VARIATION); } }} />}
+        selectedFilm={lutId}
+        onFilm={setLutId}
+        onInstantFormat={(format) => {
+          if (!creative.changeMode('instant')) return;
+          if (mode === 'edit') { setReprocessRecord(null); setMode('camera'); }
+          creative.setOptions({ ...creative.options, frame: 'memory', instantFormat: format });
+        }}
         methodLocked={creative.frames.length > 0 || creative.working}
         working={creative.working}
         onBoothMethod={creative.changeBoothMethod}
@@ -1484,9 +1571,10 @@ export default function App() {
         ratioIdx={tiledMode ? captureRatioIdx : compositeRatioIdx}
         ratioLocked={creative.frames.length > 0 || creative.working}
         onRatio={setCompositeRatioIdx}
-        lensPreview={<LensComparison source={lensPreviewSource} params={params} lut={applied.lut} lutKey={applied.key} amount={applied.amount} fx={applied.fx} look={look} ready={renderReady} />}
+        lensPreview={<LensComparison source={lensPreviewSource} params={resolvedPreview.params} lut={applied.lut} lutKey={applied.key} amount={applied.amount} fx={resolvedPreview.fx} look={look} ready={renderReady} />}
         onMode={(next) => {
           if (!creative.changeMode(next)) return;
+          if (next === 'instant') creative.setOptions({ ...creative.options, frame: 'memory', instantFormat: creative.options.instantFormat ?? 'square' });
           if (mode === 'edit') { setReprocessRecord(null); setMode('camera'); }
           cancelCountdown();
         }}

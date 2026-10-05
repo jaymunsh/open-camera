@@ -8,7 +8,7 @@ export function BlobPhoto({ blob, className, alt }: { blob: Blob; className?: st
   useEffect(() => { const next = URL.createObjectURL(blob); setUrl(next); return () => URL.revokeObjectURL(next); }, [blob]);
   return url ? <img src={url} className={className} alt={alt} /> : null;
 }
-const labels = { normal: '일반', half: '하프프레임', booth: '네 컷', double: '다중노출' };
+const labels = { normal: '일반', half: '하프프레임', booth: '네 컷', double: '다중노출', instant: '즉석사진' };
 export function PhotoHistory({ records, warning, onClose, onDelete, onReprocess }: { records: CaptureRecord[]; warning: string | null; onClose: () => void; onDelete: (r: CaptureRecord) => Promise<void>; onReprocess: (r: CaptureRecord) => Promise<void> }) {
   const [selectedId, setSelected] = useState<string | null>(null);
   const selected = records.find((record) => record.id === selectedId) ?? null;

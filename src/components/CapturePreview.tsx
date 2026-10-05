@@ -5,7 +5,7 @@ import type { CapturedFrame, CompositionOptions } from '../capture/types';
 export type PreviewDraw = ((source: HTMLCanvasElement) => void) | null;
 export type PreviewSize = 'small' | 'large' | 'folded';
 export function CapturePreview({ mode, frames, options, nextIndex, countdown, gridOn, ratio, sourceRect, viewSize, drawRef, size, onSize, bottomInset }: {
-  mode: 'half' | 'booth'; frames: CapturedFrame[]; options: CompositionOptions; nextIndex: number;
+  mode: 'half' | 'booth' | 'instant'; frames: CapturedFrame[]; options: CompositionOptions; nextIndex: number;
   countdown: number | null; gridOn: boolean;
   ratio: { w: number; h: number };
   sourceRect: { left: number; top: number; w: number; h: number };
@@ -17,7 +17,8 @@ export function CapturePreview({ mode, frames, options, nextIndex, countdown, gr
   const focusAfterResize = useRef(false);
   const id = useId();
   const folded = size === 'folded';
-  const name = mode === 'half' ? '하프프레임' : '네 컷';
+  const name = mode === 'half' ? '하프프레임' : mode === 'instant' ? '즉석사진' : '네 컷';
+  const target = mode === 'half' ? 2 : mode === 'instant' ? 1 : 4;
   const fw = frames[0]?.canvas.width ?? ratio.w * 1000, fh = frames[0]?.canvas.height ?? ratio.h * 1000;
   const full = compositionLayout(fw, fh, mode, options, Infinity);
   const aspect = full.width / full.height;
@@ -82,10 +83,10 @@ export function CapturePreview({ mode, frames, options, nextIndex, countdown, gr
     onPointerDown={(e) => e.stopPropagation()} onPointerMove={(e) => e.stopPropagation()}
     onKeyDown={(e) => { if (e.key === 'Escape' && !folded) { e.stopPropagation(); changeSize('folded'); } }}>
     {folded ? <button className="preview-unfold" aria-label="합성 미리보기 펼치기" aria-expanded={false} aria-controls={id} onClick={() => changeSize('small')}>
-      <span>{name} · {nextIndex + 1}/{mode === 'half' ? 2 : 4}</span>
+      <span>{name} · {nextIndex + 1}/{target}</span>
       <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="m6 15 6-6 6 6" /></svg>
     </button> : <div className="preview-tools">
-      <span>합성 <span>{nextIndex + 1}/{mode === 'half' ? 2 : 4}</span></span>
+      <span>{mode === 'instant' ? '즉석사진' : '합성'} <span>{nextIndex + 1}/{target}</span></span>
       <button aria-label={`합성 미리보기 ${size === 'large' ? '축소' : '확대'}`} title={size === 'large' ? '작게 보기' : '크게 보기'} onClick={() => changeSize(size === 'large' ? 'small' : 'large')}>
         <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d={size === 'large' ? 'M3 8h5V3m13 5h-5V3M3 16h5v5m13-5h-5v5' : 'M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5'} /></svg>
       </button>

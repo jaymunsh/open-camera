@@ -68,6 +68,41 @@ export interface Preset {
   fx?: FxSpec;
 }
 
+export const STUDIO_FILMS = [
+  { id: 'studio-soft', label: '부드러운 즉석필름', description: '따뜻한 피부톤 · 부드러운 밝은 영역 · 가벼운 입자' },
+  { id: 'studio-faded', label: '바랜 컬러필름', description: '들뜬 검정 · 옅은 색 · 절제된 빛샘' },
+  { id: 'studio-mono', label: '거친 흑백', description: '깊은 명암 · 거친 입자 · 색 번짐 없음' },
+] as const;
+
+// Original color responses: a soft print shoulder, lifted matte color and
+// neutral silver tones. No third-party LUT or commercial preset is sampled.
+const studioTone = (black: number, white: number): ColorFn => (r, g, b) => [r, g, b].map((v) => black + (white - black) * (v * .88 + (3 * v * v - 2 * v * v * v) * .12)) as V3;
+const STUDIO_PRESETS: Preset[] = [
+  { id: 'studio-soft', label: 'SOFT PRINT', group: '스튜디오 필름', build: () => buildLut(chain(sat(.84), studioTone(.025, .96), split([.012, .004, -.008], [.018, .006, -.024], .65))), fx: { grain: .16, soft: .18, halation: .06 } },
+  { id: 'studio-faded', label: 'FADED COLOR', group: '스튜디오 필름', build: () => buildLut(chain(sat(.72), studioTone(.075, .94), split([-.01, .012, .019], [.03, .012, -.014], .6))), fx: { grain: .28, leak: .07, dust: .025, soft: .08 } },
+  { id: 'studio-mono', label: 'SILVER GRAIN', group: '스튜디오 필름', build: () => buildLut(chain(gray(.18), studioTone(.018, .975))), fx: { grain: .56, dust: .045 } },
+];
+
+// Independent, opt-in camera texture profiles. Color functions are authored
+// here; these do not sample another app's LUTs or alter the legacy presets.
+const VINTAGE_PRESETS: Preset[] = [
+  {
+    id: 'vintage-ccd', label: '구형 디지캠', group: '빈티지 질감',
+    build: () => buildLut(chain(sat(.86), con(.06), split([-.01, .008, .022], [.015, .008, -.012], .75))),
+    fx: { pix: .32, jpeg: .18, cnoise: .24, band: .08, dsharp: .18, lens: .08, grain: .1, degrade: .85, date: true },
+  },
+  {
+    id: 'vintage-disposable', label: '일회용 필름', group: '빈티지 질감',
+    build: () => buildLut(chain(sat(.82), con(.12), studioTone(.025, .975), split([-.012, .014, -.008], [.025, .012, -.028], .8))),
+    fx: { grain: .38, soft: .28, halation: .2, lens: .18, leak: .1, dust: .06, degrade: .28 },
+  },
+  {
+    id: 'vintage-print', label: '바랜 인화사진', group: '빈티지 질감',
+    build: () => buildLut(chain(sat(.66), studioTone(.095, .905), split([.014, .004, -.012], [.028, .012, -.025], .65))),
+    fx: { grain: .18, soft: .16, dust: .055, leak: .045, halation: .1, degrade: .12 },
+  },
+];
+
 export const PRESETS: Preset[] = [
   { id: 'none', label: 'ORIGINAL', group: '기본', build: () => buildLut((r, g, b) => [r, g, b]) },
   { id: 'mono', label: 'MONO', group: '기본', build: () => buildLut(gray(0.15)) },
@@ -293,6 +328,8 @@ export const PRESETS: Preset[] = [
       buildLut(chain(sat(1.15), gain(0.96, 1.07, 0.96), con(0.16), split([-0.02, 0.03, 0.01], [0.03, 0.01, -0.02], 0.9))),
     fx: { grain: 0.15, dsharp: 0.35, dclip: 0.2 },
   },
+  ...STUDIO_PRESETS,
+  ...VINTAGE_PRESETS,
 ];
 
 const cache = new Map<string, Promise<LutData>>();

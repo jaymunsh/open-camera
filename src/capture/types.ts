@@ -3,8 +3,9 @@ import type { DateFmt, DateSize } from '../engine/pipeline';
 import type { FilmPattern, FilterParams, FxSpec } from '../engine/types';
 import type { VariationSettings } from '../engine/variation';
 
-export type CaptureMode = 'normal' | 'half' | 'booth' | 'double';
+export type CaptureMode = 'normal' | 'half' | 'booth' | 'double' | 'instant';
 export type BoothMethod = 'auto' | 'manual';
+export type BoothInterval = 3 | 5 | 10;
 export type BlendMode = 'average' | 'lighten' | 'multiply';
 export type LensMode = 'none' | 'star' | 'prism';
 export type StampStyle = 'amber' | 'red';
@@ -26,8 +27,10 @@ export interface CompositionOptions {
   blend: BlendMode;
   mix: number;
   layout: 'grid' | 'strip' | 'row';
-  paper: 'white' | 'black';
+  paper: 'white' | 'black' | 'cream' | 'blush';
   frame?: 'plain' | 'memory' | 'film';
+  caption?: string;
+  instantFormat?: 'square' | 'portrait';
 }
 export const DEFAULT_COMPOSITION: CompositionOptions = { blend: 'average', mix: .5, layout: 'grid', paper: 'white' };
 export interface CaptureRecord {

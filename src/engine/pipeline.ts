@@ -651,6 +651,32 @@ export function exportSize(
 let expCanvas: HTMLCanvasElement | null = null;
 let expPipe: FilterPipeline | null = null;
 
+// Opt-in photograph processing, before date stamps or paper/captions. Keep the
+// output dimensions and the caller's original source; only the photo detail is
+// intentionally reduced. The live GPU preview remains a lightweight estimate.
+async function degradeCapture(canvas: HTMLCanvasElement, amount: number): Promise<void> {
+  if (!Number.isFinite(amount) || amount <= 0) return;
+  const strength = Math.min(1, amount);
+  const maxEdge = Math.round(2400 - 1600 * strength);
+  const scale = Math.min(1, maxEdge / Math.max(canvas.width, canvas.height));
+  const small = document.createElement('canvas');
+  small.width = Math.max(1, Math.round(canvas.width * scale));
+  small.height = Math.max(1, Math.round(canvas.height * scale));
+  const ctx = small.getContext('2d')!;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(canvas, 0, 0, small.width, small.height);
+  const blob = await new Promise<Blob>((resolve, reject) => small.toBlob(
+    (result) => result ? resolve(result) : reject(new Error('빈티지 사진 처리에 실패했습니다. 다시 촬영해주세요.')),
+    'image/jpeg', .92 - .5 * strength,
+  ));
+  const bitmap = await createImageBitmap(blob);
+  try {
+    const out = canvas.getContext('2d')!;
+    out.imageSmoothingQuality = 'high';
+    out.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  } finally { bitmap.close(); }
+}
+
 export type DateFmt = 'yy' | 'iso' | 'ddmmyy' | 'ddmmyyyy' | 'mmddyyyy';
 
 export type DateSize = 'sm' | 'md' | 'lg';
@@ -704,14 +730,15 @@ export async function drawDateStamp(canvas: HTMLCanvasElement, options: DateStam
   const vert = options.orient === 'l' || (options.orient === 'auto' && w > h);
   const stampH = h * (DATE_SIZES.find((s) => s.id === options.size)?.scale ?? .044);
   const text = dateLabel(options.timestamp === undefined ? new Date() : new Date(options.timestamp), options.fmt);
+  // Both styles now use the bundled segment face, including the first export.
+  await stampFontReady;
   ctx.save();
   if (options.style === 'red') {
     const s = renderStampRed(text, stampH * .6, w * .92, h * .936, vert);
     ctx.drawImage(s.canvas, vert ? w * .04 : w * .96 - s.w, h * .968 - s.h, s.w, s.h);
   } else {
-    await stampFontReady;
     const s = renderStampSoft(text, Math.max(2, Math.round(stampH / 7)), vert);
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.22)';
     ctx.shadowBlur = Math.round(h * .006);
     ctx.drawImage(s.canvas, vert ? w * .045 : w - w * .045 - s.w, h - h * .035 - s.h, s.w, s.h);
   }
@@ -776,6 +803,7 @@ export async function renderFilteredCanvas(
   const owned = document.createElement('canvas');
   owned.width = out.w; owned.height = out.h;
   owned.getContext('2d')!.drawImage(expCanvas, 0, 0);
+  if ((fx?.degrade ?? 0) > 0) await degradeCapture(owned, fx!.degrade!);
   await drawDateStamp(owned, dateStamp);
   return owned;
 }

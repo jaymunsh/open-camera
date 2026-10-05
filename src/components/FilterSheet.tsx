@@ -154,6 +154,7 @@ export function FilterSheet({ selected, onSelect, getSource, onClose, customs, s
               }}
             >
               <div className="sheet-group">{s.title}</div>
+              {s.title === '빈티지 질감' && <p className="sheet-group-note">구형 디지캠은 저해상도·색 노이즈, 일회용 필름은 입자·빛 번짐, 인화사진은 바랜 색감이에요. 저장할 때 축소·압축 질감을 더합니다. 강도는 스튜디오의 ‘전체 룩’으로 조절해요.</p>}
               <div className="sheet-grid">
                 {s.items.map((p) => (
                   <button

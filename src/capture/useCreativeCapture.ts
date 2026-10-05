@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { drawDateStamp } from '../engine/pipeline';
 import { saveImage } from '../utils/share';
 import { timestampName } from '../utils/image';
-import { canvasBlob, composeFrames } from './composite';
+import { canvasBlob, composeFrames, drawCompositionDate } from './composite';
 import { deleteCapture, listCaptures, saveCapture } from './store';
-import { DEFAULT_COMPOSITION, type BoothMethod, type CaptureMode, type CapturedFrame, type CaptureRecord } from './types';
+import { DEFAULT_COMPOSITION, type BoothInterval, type BoothMethod, type CaptureMode, type CapturedFrame, type CaptureRecord } from './types';
 
 function recent(rows: CaptureRecord[]) {
   const unique = [...new Map(rows.map((r) => [r.id, r])).values()].sort((a, b) => b.createdAt - a.createdAt);
@@ -13,6 +12,7 @@ function recent(rows: CaptureRecord[]) {
 export function useCreativeCapture(captureFrame: () => Promise<CapturedFrame>, onError: (message: string) => void) {
   const [mode, setModeState] = useState<CaptureMode>('normal');
   const [boothMethod, setBoothMethod] = useState<BoothMethod>('auto');
+  const [boothInterval, setBoothInterval] = useState<BoothInterval>(3);
   const [frames, setFrames] = useState<CapturedFrame[]>([]);
   const [review, setReview] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -32,7 +32,7 @@ export function useCreativeCapture(captureFrame: () => Promise<CapturedFrame>, o
   const deleted = useRef(new Set<string>());
   const input = useRef(captureFrame); input.current = captureFrame;
   const report = useRef(onError); report.current = onError;
-  const target = mode === 'booth' ? 4 : 2;
+  const target = mode === 'booth' ? 4 : mode === 'instant' ? 1 : 2;
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; generation.current++; }; }, []);
   useEffect(() => {
@@ -68,6 +68,10 @@ export function useCreativeCapture(captureFrame: () => Promise<CapturedFrame>, o
     if (frames.length || working || lock.current) return;
     setBoothMethod(next); setPaused(false);
   };
+  const changeBoothInterval = (next: BoothInterval) => {
+    if (frames.length || working || lock.current || ![3, 5, 10].includes(next)) return;
+    setBoothInterval(next);
+  };
   const changeMode = (next: CaptureMode) => {
     if (working || lock.current) return false;
     if (next === mode) return true;
@@ -93,10 +97,10 @@ export function useCreativeCapture(captureFrame: () => Promise<CapturedFrame>, o
   const shootRef = useRef(shoot); shootRef.current = shoot;
   useEffect(() => {
     if (mode !== 'booth' || boothMethod !== 'auto' || !frames.length || frames.length >= 4 || working || paused || review || retakeIndex !== null || historyOpen) return;
-    let n = 3; setCountdown(n);
+    let n = boothInterval; setCountdown(n);
     const iv = window.setInterval(() => { n--; setCountdown(n || null); if (n <= 0) { clearInterval(iv); void shootRef.current(); } }, 1000);
     return () => { clearInterval(iv); setCountdown(null); };
-  }, [frames.length, mode, boothMethod, paused, working, review, retakeIndex, historyOpen]);
+  }, [frames.length, mode, boothMethod, boothInterval, paused, working, review, retakeIndex, historyOpen]);
   useEffect(() => {
     const hide = () => { if (document.hidden && mode === 'booth') { setPaused(true); setCountdown(null); } };
     document.addEventListener('visibilitychange', hide);
@@ -109,7 +113,7 @@ export function useCreativeCapture(captureFrame: () => Promise<CapturedFrame>, o
       const canvas = composeFrames(frames.map((f) => f.canvas), mode, options);
       const last = frames.at(-1)!;
       const d = last.settings.date;
-      await drawDateStamp(canvas, { on: d.mode === 'on' || (d.mode === 'auto' && !!last.fx?.date), ...d, timestamp: last.createdAt });
+      await drawCompositionDate(canvas, frames.map((f) => f.canvas), mode, options, { on: d.mode === 'on' || (d.mode === 'auto' && !!last.fx?.date), ...d, timestamp: last.createdAt });
       const blob = await canvasBlob(canvas);
       if (live) { setPreview(canvas); setPrepared({ blob, width: canvas.width, height: canvas.height }); }
     };
@@ -122,7 +126,8 @@ export function useCreativeCapture(captureFrame: () => Promise<CapturedFrame>, o
     lock.current = true; setWorking(true);
     const last = frames.at(-1)!;
     if (remembered.current?.blob !== prepared.blob) {
-      const record: CaptureRecord = { id: crypto.randomUUID(), createdAt: last.createdAt, blob: prepared.blob, name: timestampName(), width: prepared.width, height: prepared.height, mode, originals: [], settings: last.settings, frameSettings: frames.map((f) => f.settings), composition: options };
+      const record: CaptureRecord = { id: crypto.randomUUID(), createdAt: Date.now(), shotAt: last.createdAt, blob: prepared.blob, name: timestampName(), width: prepared.width, height: prepared.height, mode, originals: [], settings: last.settings, frameSettings: frames.map((f) => f.settings), composition: options };
+      if (frames.some(f => f.pattern)) record.framePatterns = frames.map(f => f.pattern ? { ...f.pattern } : null);
       const originals = frames.every((f) => f.original) ? Promise.all(frames.map((f) => canvasBlob(f.original!))) : undefined;
       remembered.current = { blob: prepared.blob, name: record.name };
       void remember(record, originals);
@@ -132,7 +137,7 @@ export function useCreativeCapture(captureFrame: () => Promise<CapturedFrame>, o
     catch (e) { setFailure(e instanceof Error ? e.message : '저장에 실패했습니다'); }
     finally { lock.current = false; setWorking(false); }
   };
-  return { mode, changeMode, boothMethod, changeBoothMethod, frames, review, historyOpen, setHistoryOpen, records, warning, failure, working, options, setOptions, countdown, paused, pause, resume: () => setPaused(false), retakeIndex, prepared, preview, remember, remove, cancel, shoot, retake, saveReview,
+  return { mode, changeMode, boothMethod, changeBoothMethod, boothInterval, changeBoothInterval, frames, review, historyOpen, setHistoryOpen, records, warning, failure, working, options, setOptions, countdown, paused, pause, resume: () => setPaused(false), retakeIndex, prepared, preview, remember, remove, cancel, shoot, retake, saveReview,
     locked: mode === 'booth' && frames.length > 0 && !review,
     nextIndex: retakeIndex === null ? frames.length : retakeIndex,
     target,

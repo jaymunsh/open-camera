@@ -9,6 +9,8 @@ export type CameraInfoSnapshot = {
 export function useCamera(enabled = true) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const trackRef = useRef<MediaStreamTrack | null>(null);
+  const resumeZoomRef = useRef<number | null>(null);
+  const actualZoomRef = useRef<{ track: MediaStreamTrack; value: number | null } | null>(null);
   const [facing, setFacing] = useState<Facing>('environment');
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,6 +25,10 @@ export function useCamera(enabled = true) {
   useEffect(() => {
     let cancelled = false;
     let stream: MediaStream | null = null;
+    let suspended = false;
+    let recoveryQueued = false;
+    const resumeZoom = facing === 'user' ? resumeZoomRef.current : null;
+    resumeZoomRef.current = null;
     setReady(false);
     setError(null);
     setZoomCaps(null);
@@ -47,27 +53,37 @@ export function useCamera(enabled = true) {
           },
           audio: false,
         });
-        if (cancelled) {
+        if (cancelled || suspended) {
           stream.getTracks().forEach((t) => t.stop());
           return;
         }
         // loadeddata can mark the camera ready before play() resolves.
         const track = stream.getVideoTracks()[0];
         trackRef.current = track;
+        const caps = track.getCapabilities() as MediaTrackCapabilities & {
+          zoom?: { min: number; max: number; step: number };
+        };
+        // Match the working raw-video probe: native minimum means widest, not
+        // necessarily web zoom 0.5 or 1. Restore only a previously read value.
+        if (facing === 'user' && caps.zoom && Number.isFinite(caps.zoom.min)
+          && caps.zoom.min > 0 && caps.zoom.max >= caps.zoom.min) {
+          const target = Math.min(caps.zoom.max, Math.max(caps.zoom.min, resumeZoom ?? caps.zoom.min));
+          try { await track.applyConstraints({ advanced: [{ zoom: target } as MediaTrackConstraintSet] }); }
+          catch { /* Optional zoom support is not guaranteed; read back below. */ }
+        }
+        if (cancelled || suspended) return;
         const v = videoRef.current;
         if (v) {
           v.srcObject = stream;
           await v.play().catch(() => {});
         }
-        if (cancelled) return;
-        const caps = track.getCapabilities() as MediaTrackCapabilities & {
-          zoom?: { min: number; max: number; step: number };
-        };
+        if (cancelled || suspended) return;
+        const cur = (track.getSettings() as { zoom?: number }).zoom;
+        actualZoomRef.current = { track, value: typeof cur === 'number' && Number.isFinite(cur) ? cur : null };
         setTorchOk(!!(caps as { torch?: boolean }).torch);
         setTorchOn(false);
         if (caps.zoom && caps.zoom.max > caps.zoom.min) {
           setZoomCaps(caps.zoom);
-          const cur = (track.getSettings() as { zoom?: number }).zoom;
           setZoomState(cur ?? caps.zoom.min);
         } else {
           setZoomState(1);
@@ -93,7 +109,7 @@ export function useCamera(enabled = true) {
           /* lens enumeration unavailable */
         }
       } catch (e) {
-        if (!cancelled)
+        if (!cancelled && !suspended)
           setError(
             e instanceof DOMException && e.name === 'NotAllowedError'
               ? '카메라 권한이 거부되었습니다. 설정에서 허용해주세요.'
@@ -101,20 +117,46 @@ export function useCamera(enabled = true) {
           );
       }
     }
-    start();
-
-    const onVis = () => {
-      if (document.visibilityState !== 'visible') return;
+    const suspendSelfie = () => {
+      if (cancelled || facing !== 'user' || suspended) return;
+      suspended = true;
+      const track = trackRef.current;
+      resumeZoomRef.current = track && actualZoomRef.current?.track === track
+        ? actualZoomRef.current.value : resumeZoom;
+      setReady(false);
+      trackRef.current = null;
+      stream?.getTracks().forEach((t) => t.stop());
+      const v = videoRef.current;
+      if (v?.srcObject === stream) { v.pause(); v.srcObject = null; }
+    };
+    const resume = () => {
+      if (cancelled || recoveryQueued || document.visibilityState !== 'visible') return;
+      // A live/ready Safari track can still resume with different framing.
+      // Recreate the selfie session just as the isolated probe does.
+      if (suspended) { recoveryQueued = true; setNonce((n) => n + 1); return; }
       const v = videoRef.current;
       const dead = !stream || stream.getTracks().every((t) => t.readyState === 'ended');
       const stalled = !!v && v.readyState < 2;
       if (dead || stalled) setNonce((n) => n + 1);
     };
+    const onVis = () => {
+      if (document.visibilityState === 'hidden') suspendSelfie();
+      else resume();
+    };
+    const onPageShow = () => { if (suspended) resume(); };
     document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('pagehide', suspendSelfie);
+    window.addEventListener('pageshow', onPageShow);
+    // A queued recovery can render after the page was hidden again. Preserve
+    // its zoom snapshot and wait for visibility instead of starting in background.
+    if (facing === 'user' && document.visibilityState === 'hidden') suspendSelfie();
+    else start();
 
     return () => {
       cancelled = true;
       document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('pagehide', suspendSelfie);
+      window.removeEventListener('pageshow', onPageShow);
       stream?.getTracks().forEach((t) => t.stop());
       trackRef.current = null;
       const v = videoRef.current;
@@ -126,7 +168,9 @@ export function useCamera(enabled = true) {
   }, [enabled, facing, nonce]);
 
   const onLoaded = useCallback(() => {
-    if (!enabled) return;
+    // Selfie suspension clears the active track. A rear stream can load while
+    // hidden and must remain ready when its live stream is reused on return.
+    if (!enabled || !trackRef.current) return;
     const v = videoRef.current;
     if (v && v.videoWidth) setSize({ w: v.videoWidth, h: v.videoHeight });
     setReady(true);
@@ -145,7 +189,10 @@ export function useCamera(enabled = true) {
         // Optional constraints may succeed without being applied. Display readback,
         // not the requested number, and ignore an old track after camera switching.
         const actual = (t.getSettings() as { zoom?: number }).zoom;
-        if (trackRef.current === t && typeof actual === 'number' && Number.isFinite(actual)) setZoomState(actual);
+        if (trackRef.current === t && typeof actual === 'number' && Number.isFinite(actual)) {
+          actualZoomRef.current = { track: t, value: actual };
+          setZoomState(actual);
+        }
       } catch {
         /* zoom not applicable */
       }

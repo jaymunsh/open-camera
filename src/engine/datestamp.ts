@@ -1,7 +1,6 @@
-// Classic digicam date stamp: a thin italic serif rasterized tiny then
-// upscaled — reproduces the soft, slightly-bled amber stamp of early CCD
-// cameras. Rendering small and scaling up is what makes it look like the
-// camera's low-res overlay rather than crisp typeset text.
+// Camcorder-style dates share the bundled angular seven-segment face.
+// Warm, faded ink and a small optical bleed belong to the stamp itself,
+// so live preview, composition and export do not depend on CSS effects.
 
 export interface StampSpec {
   canvas: HTMLCanvasElement;
@@ -31,17 +30,14 @@ export const stampFontReady: Promise<unknown> = (async () => {
   }
 })();
 
-// `dot` keeps the old scale contract: logical height = 7 * dot.
-// Render DSEG7 (the classic LED digicam face, italic cut) large so the
-// segments rasterize cleanly, then downscale — soft edges like the real
-// low-res overlay. The font's apostrophe sits at midline so it is drawn
-// raised to cap height; padding covers italic overhang.
-export function renderStampSoft(
+// The font's apostrophe sits at midline: raise it to cap height.
+// Padding covers italic overhang and the soft colored bleed.
+function renderSegmentStamp(
   text: string,
-  dot: number,
+  h: number,
+  style: 'amber' | 'red',
   vertical = false,
 ): StampSpec {
-  const h = 7 * dot;
   const fs = 40;
   const ls = 2;
   const pad = 14;
@@ -51,37 +47,54 @@ export function renderStampSoft(
   probe.font = FONT;
   const xs: number[] = [];
   let x = pad;
-  for (const ch of text) {
+  let inkRight = pad;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
     xs.push(x);
-    x += probe.measureText(ch).width + ls;
+    if (ch === ' ' && i > 0 && text[i + 1] && text[i + 1] !== ' ') {
+      // DSEG's narrow 1 sits on the right of a full-width digit cell.
+      // Space date groups by visible ink, not by that invisible cell:
+      // YY→10 must have the same gap as 10→05.
+      x = inkRight + fs * .35 + probe.measureText(text[i + 1]).actualBoundingBoxLeft;
+    } else {
+      const metrics = probe.measureText(ch);
+      if (ch !== ' ') inkRight = Math.max(inkRight, x + metrics.actualBoundingBoxRight);
+      x += metrics.width + ls;
+    }
   }
-  small.width = Math.ceil(x + pad);
+  small.width = Math.ceil(Math.max(x, inkRight) + pad);
   small.height = 56;
   const c = small.getContext('2d')!;
   c.font = FONT;
   c.textBaseline = 'middle';
   const my = small.height / 2 + 2;
 
-  const pass = (color: string, ox = 0, oy = 0) => {
+  const pass = (color: string, ox = 0, oy = 0, faded = false) => {
     c.fillStyle = color;
     let i = 0;
     for (const ch of text) {
+      // Fixed per-character variation, never random: no shimmer between
+      // preview frames or a different pattern in the saved photograph.
+      c.globalAlpha = faded ? 1 - (i % 3) * .025 : 1;
       // the font's own apostrophe sits at midline — raise it to cap height
       const raise = ch === "'" || ch === '’' ? -fs * 0.32 : 0;
       c.fillText(ch, xs[i] + ox, my + oy + raise);
       i++;
     }
+    c.globalAlpha = 1;
   };
-  // dark outline first — the real stamp is legible on bright backgrounds
+  // A faint backing keeps light scenes readable without a crisp black rim.
   for (const [dx, dy] of [
-    [-1.6, 0],
-    [1.6, 0],
-    [0, -1.6],
-    [0, 1.6],
+    [-1, 0],
+    [1, 0],
+    [0, -1],
+    [0, 1],
   ]) {
-    pass('rgba(30, 10, 0, 0.8)', dx, dy);
+    pass('rgba(55, 25, 14, 0.18)', dx, dy);
   }
-  pass('rgba(255, 150, 55, 0.98)');
+  c.shadowColor = style === 'red' ? 'rgba(232, 88, 66, 0.45)' : 'rgba(232, 177, 114, 0.3)';
+  c.shadowBlur = 2;
+  pass(style === 'red' ? 'rgba(232, 88, 66, 0.94)' : 'rgba(232, 177, 114, 0.9)', 0, 0, true);
 
   const out = document.createElement('canvas');
   const k = (h * 2) / small.height;
@@ -107,22 +120,20 @@ export function renderStampSoft(
   return { canvas: out, w: out.width / 2, h: out.height / 2 };
 }
 
+// `dot` retains the existing amber scale contract: logical height = 7 * dot.
+export function renderStampSoft(text: string, dot: number, vertical = false): StampSpec {
+  return renderSegmentStamp(text, 7 * dot, 'amber', vertical);
+}
+
 export function renderStampRed(text: string, height: number, maxW: number, maxH: number, vertical = false): StampSpec {
-  const probe = document.createElement('canvas').getContext('2d')!;
-  probe.font = '40px monospace';
-  const widthRatio = (probe.measureText(text).width + 8) / 48;
-  const wantedH = Math.max(1, height);
-  const wantedW = wantedH * widthRatio;
-  const scale = Math.min(1, maxW / (vertical ? wantedH : wantedW), maxH / (vertical ? wantedW : wantedH));
-  const w = Math.max(.5, wantedW * scale), h = Math.max(.5, wantedH * scale);
+  const stamp = renderSegmentStamp(text, Math.max(1, height), 'red', vertical);
+  const scale = Math.min(1, maxW / stamp.w, maxH / stamp.h);
+  if (scale === 1) return stamp;
   const c = document.createElement('canvas');
-  c.width = Math.max(1, Math.floor((vertical ? h : w) * 2));
-  c.height = Math.max(1, Math.floor((vertical ? w : h) * 2));
+  c.width = Math.max(1, Math.floor(stamp.canvas.width * scale));
+  c.height = Math.max(1, Math.floor(stamp.canvas.height * scale));
   const ctx = c.getContext('2d')!;
-  if (vertical) { ctx.translate(c.width, 0); ctx.rotate(Math.PI / 2); }
-  ctx.fillStyle = '#C94F43';
-  ctx.font = `${h * 2 * 40 / 48}px monospace`;
-  ctx.textBaseline = 'middle';
-  ctx.fillText(text, h * .15, h);
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(stamp.canvas, 0, 0, c.width, c.height);
   return { canvas: c, w: c.width / 2, h: c.height / 2 };
 }

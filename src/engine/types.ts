@@ -64,6 +64,8 @@ export interface FxSpec {
   lens?: number;
   defect?: number;
   redeye?: number;
+  // Optional capture-only low-resolution / JPEG processing, 0 = unchanged.
+  degrade?: number;
 }
 
 export interface ParamDef {
