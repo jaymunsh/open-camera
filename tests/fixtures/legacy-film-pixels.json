@@ -1,0 +1,21 @@
+{
+  "baseline": "3f5c3a0",
+  "size": [320, 240],
+  "params": { "exposure": 0.1, "contrast": 0.05 },
+  "pattern": { "version": 1, "seed": 0.25 },
+  "time": 0,
+  "hashes": {
+    "gradient/none": "cd854abcb7a91a73e15df66c9f3f0d16e68b62d62ff5e6a08ffca72f925d3657",
+    "gradient/film-fuji160c": "9beb2b001bcdfa153f061ff072123ba43c676a9796b77eb8e50ff8488e936552",
+    "gradient/vintage-disposable": "0ad347a3fed8ae24b2803c5635bbed56225d482d63b17160227ca30fc915b3cf",
+    "gradient/studio-mono": "273d187ed4f88228b26a0d1410be0b891c876f0df4279a77d6f612f72b70c928",
+    "checker/none": "ec29b75c3f570f232bc91da5027869541da9c2b51c796c172c1208f14b0c4982",
+    "checker/film-fuji160c": "85fe6b8e9330c72944927610c3986cdb162a187a4a6ba41f8f446c335365e9fb",
+    "checker/vintage-disposable": "ebb512ac050889b50fb2f43996279ee26b9f43ea6217c14c14634a97c0ebaadc",
+    "checker/studio-mono": "8f9cabdd2bc9c6c3390e627a6ddfd4f1f945e22cfe2ec100b8162f6a80d79009",
+    "light/none": "c187d009ff0980534ac591751170b3c9d0e497c6c55cdd0e816f83818784ddc3",
+    "light/film-fuji160c": "b864612edd130d66b480bd1deb1738fe914affe5b02d90ffc8ac3b9aaa8e3b91",
+    "light/vintage-disposable": "0304d329c73a115f80b3c2fff697538317d87ec04539b3f39b7bcc4d21de27d0",
+    "light/studio-mono": "05debc8d12ca58079e89d71088cacc822b3b42f097cfb2339423e027ab799069"
+  }
+}

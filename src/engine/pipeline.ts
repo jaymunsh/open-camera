@@ -3,6 +3,8 @@ import { renderStampRed, renderStampSoft, stampFontReady } from './datestamp';
 import type { RenderLook } from './look';
 import { DEFAULT_PARAMS, type FilterParams, type FxSpec, type LutData } from './types';
 import { patternNoise } from './variation';
+import { filmGrainTile } from './filmGrain';
+import { createFilmFragmentShader } from './filmShader';
 
 export interface RenderOpts {
   fit?: 'cover' | 'contain';
@@ -169,6 +171,12 @@ export function srcSize(src: TexImageSource): { w: number; h: number } {
 export class FilterPipeline {
   private gl: WebGL2RenderingContext;
   private prog!: WebGLProgram;
+  private legacyProg!: WebGLProgram;
+  private legacyLocs: Record<string, WebGLUniformLocation | null> = {};
+  private filmProg: WebGLProgram | null = null;
+  private filmLocs: Record<string, WebGLUniformLocation | null> = {};
+  private filmTex: WebGLTexture | null = null;
+  private filmSeed: number | null = null;
   private srcTex!: WebGLTexture;
   private grainTex!: WebGLTexture;
   private patternTex: WebGLTexture | null = null;
@@ -235,6 +243,10 @@ export class FilterPipeline {
     this.locs = {};
     this.patternTex = null;
     this.patternSeed = null;
+    this.filmProg = null;
+    this.filmLocs = {};
+    this.filmTex = null;
+    this.filmSeed = null;
 
     const prog = gl.createProgram()!;
     gl.attachShader(prog, compile(gl, gl.VERTEX_SHADER, VERT_SHADER));
@@ -245,6 +257,8 @@ export class FilterPipeline {
     this.prog = prog;
     for (const n of UNIFORMS)
       this.locs[n] = gl.getUniformLocation(prog, n) ?? gl.getUniformLocation(prog, `${n}[0]`);
+    this.legacyProg = prog;
+    this.legacyLocs = this.locs;
 
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
 
@@ -305,6 +319,24 @@ export class FilterPipeline {
       lut.data,
     );
     this.lutN = lut.size;
+  }
+
+  private prepareFilmProgram() {
+    if (this.filmProg) return;
+    const gl = this.gl, prog = gl.createProgram();
+    if (!prog) throw new Error('새 필름 처리를 준비하지 못했어요.');
+    const shaders: WebGLShader[] = [];
+    try {
+      shaders.push(compile(gl, gl.VERTEX_SHADER, VERT_SHADER));
+      shaders.push(compile(gl, gl.FRAGMENT_SHADER, createFilmFragmentShader(FRAG_SHADER)));
+      for (const shader of shaders) gl.attachShader(prog, shader);
+      gl.linkProgram(prog);
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog) ?? 'film program link failed');
+      const locs: Record<string, WebGLUniformLocation | null> = {};
+      for (const name of [...UNIFORMS, 'u_filmTex', 'u_filmGrain', 'u_filmGlow']) locs[name] = gl.getUniformLocation(prog, name) ?? gl.getUniformLocation(prog, `${name}[0]`);
+      this.filmProg = prog; this.filmLocs = locs;
+    } catch (error) { gl.deleteProgram(prog); throw error; }
+    finally { for (const shader of shaders) gl.deleteShader(shader); }
   }
 
   setFx(fx: FxSpec | null) {
@@ -473,6 +505,11 @@ export class FilterPipeline {
     if (opts.fx !== undefined) this.fx = opts.fx;
     const fx = this.fx;
     const pattern = fx?.pattern;
+    const quality = opts.look?.filmQuality;
+    const filmActive = !!quality && (quality.grain > .001 || quality.glow > .001);
+    if (filmActive) this.prepareFilmProgram();
+    this.prog = filmActive ? this.filmProg! : this.legacyProg;
+    this.locs = filmActive ? this.filmLocs : this.legacyLocs;
 
     const fit = opts.fit ?? 'cover';
     const sa = this.srcW / this.srcH;
@@ -540,6 +577,24 @@ export class FilterPipeline {
     gl.uniform1i(this.locs.u_warp, 4);
 
     const u = this.locs;
+    if (filmActive && quality) {
+      gl.activeTexture(gl.TEXTURE5);
+      if (quality.grain > .001 && (!this.filmTex || this.filmSeed !== quality.seed)) {
+        if (!this.filmTex) this.filmTex = gl.createTexture();
+        if (!this.filmTex) throw new Error('새 필름 입자를 준비하지 못했어요.');
+        gl.bindTexture(gl.TEXTURE_2D, this.filmTex);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 256, 0, gl.RGBA, gl.UNSIGNED_BYTE, filmGrainTile(quality.seed));
+        gl.generateMipmap(gl.TEXTURE_2D); this.filmSeed = quality.seed;
+      }
+      gl.bindTexture(gl.TEXTURE_2D, this.filmTex ?? this.grainTex);
+      gl.uniform1i(u.u_filmTex, 5);
+      gl.uniform4f(u.u_filmGrain, quality.grain, quality.size, quality.color, quality.shadows);
+      gl.uniform2f(u.u_filmGlow, quality.glow, quality.glowRadius);
+    }
     gl.uniform1f(u.u_lutN, this.lutN);
     gl.uniform1f(u.u_lutAmount, lutAmount);
     gl.uniform1f(u.u_exposure, params.exposure);
@@ -618,7 +673,7 @@ export class FilterPipeline {
       ev[i * 4 + 3] = 1;
     }
     gl.uniform4fv(u.u_eyes, ev);
-    gl.uniform1f(u.u_grain, Math.max(0, params.grain + (fx?.grain ?? 0)));
+    gl.uniform1f(u.u_grain, quality ? 0 : Math.max(0, params.grain + (fx?.grain ?? 0)));
     gl.uniform1f(u.u_beauty, this.beautyOn ? this.beauty : 0);
     gl.uniform1f(u.u_tone, this.beautyOn ? this.tone : 0);
     gl.uniform1f(u.u_undereye, this.beautyOn ? this.undereye : 0);

@@ -1,7 +1,8 @@
 import type { LensMode } from '../capture/types';
 import type { FxSpec } from './types';
+import type { ResolvedFilmQuality } from './filmQuality';
 
-export interface RenderLook { lens: LensMode; lensAmount: number; gentle: boolean }
+export interface RenderLook { lens: LensMode; lensAmount: number; gentle: boolean; filmQuality?: ResolvedFilmQuality | null }
 export const DEFAULT_LOOK: RenderLook = { lens: 'none', lensAmount: .5, gentle: false };
 export function deriveFx(fx: FxSpec | null, strength: number, mode: 'color' | 'whole', gentle: boolean): FxSpec | null {
   if (!fx) return null;
