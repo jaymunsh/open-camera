@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PRESETS } from '../engine/lut';
-import { applyThumb, renderPresetThumbs } from './thumbs';
+import { applyThumb, observePresetThumbs, type ThumbnailOptions } from './thumbs';
 
 const THUMB = 112;
 const FAV_KEY = 'oc-favs';
@@ -32,9 +32,10 @@ interface Props {
   customs: { id: string; name: string }[];
   srcKey?: string;
   preferSrc?: boolean;
+  previewOptions?: ThumbnailOptions;
 }
 
-export function FilterSheet({ selected, onSelect, getSource, onClose, customs, srcKey = 'smp', preferSrc = false }: Props) {
+export function FilterSheet({ selected, onSelect, getSource, onClose, customs, srcKey = 'smp', preferSrc = false, previewOptions }: Props) {
   const refs = useRef(new Map<HTMLCanvasElement, string>());
   const sheetRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -69,19 +70,15 @@ export function FilterSheet({ selected, onSelect, getSource, onClose, customs, s
   }, [recents, favs, baseGroups, byId, allItems]);
 
   useEffect(() => {
-    let cancelled = false;
-    renderPresetThumbs(
+    return observePresetThumbs(
       refs.current,
       allItems.map((i) => ({ id: i.id, custom: i.custom, fx: i.fx })),
       getSource(),
-      () => cancelled,
-      { srcKey, preferSrc },
+      { srcKey, preferSrc, ...previewOptions },
+      scrollRef.current,
     );
-    return () => {
-      cancelled = true;
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customs, srcKey]);
+  }, [customs, srcKey, previewOptions]);
 
   const jumpTo = (title: string) => {
     const el = groupRefs.current.get(title);

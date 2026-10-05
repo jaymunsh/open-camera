@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { PRESETS } from '../engine/lut';
-import { applyThumb, renderPresetThumbs } from './thumbs';
+import { applyThumb, observePresetThumbs, type ThumbnailOptions } from './thumbs';
 
 const THUMB = 96;
 
@@ -15,6 +15,7 @@ interface Props {
   preferSrc?: boolean;
   intensity?: number;
   onIntensity?: (v: number) => void;
+  previewOptions?: ThumbnailOptions;
 }
 
 export function FilterStrip({
@@ -28,6 +29,7 @@ export function FilterStrip({
   preferSrc = false,
   intensity = 1,
   onIntensity,
+  previewOptions,
 }: Props) {
   const refs = useRef(new Map<HTMLCanvasElement, string>());
   const items = useRef(new Map<string, HTMLButtonElement>());
@@ -64,14 +66,11 @@ export function FilterStrip({
   ];
 
   useEffect(() => {
-    let cancelled = false;
-    renderPresetThumbs(refs.current, thumbItems, getSource(), () => cancelled, {
+    return observePresetThumbs(refs.current, thumbItems, getSource(), {
       srcKey,
       preferSrc,
-    });
-    return () => {
-      cancelled = true;
-    };
+      ...previewOptions,
+    }, strip.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 
