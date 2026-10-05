@@ -22,6 +22,7 @@ for (const [format, ratio] of [['즉석 정사각', 114 / 142], ['즉석 세로'
     await page.goto('/'); await page.getByRole('button', { name: '스튜디오', exact: true }).click();
     const studio = page.getByRole('dialog', { name: '스튜디오', exact: true });
     await studio.getByRole('button', { name: format, exact: true }).click();
+    await studio.locator('summary').filter({ hasText: '프레임 꾸미기' }).click();
     await studio.getByRole('button', { name: '크림', exact: true }).click(); await studio.getByLabel('프레임 문구', { exact: true }).fill('오늘도 좋은 날');
     await studio.getByRole('tab', { name: '촬영 모드', exact: true }).click(); await studio.getByLabel('원본도 보관').check();
     await studio.getByRole('button', { name: '닫기', exact: true }).click();

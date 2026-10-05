@@ -34,6 +34,7 @@ test('Studio previews the actual frame and keeps customization through capture, 
   await expect(preview).toBeVisible();
   await dialog.getByRole('button', { name: '1:1', exact: true }).click();
   await dialog.getByRole('button', { name: '수동', exact: true }).click();
+  await dialog.locator('summary').filter({ hasText: '프레임 꾸미기' }).click();
   await dialog.getByRole('button', { name: '크림', exact: true }).click();
   await dialog.getByLabel('프레임 문구', { exact: true }).fill('우리의 하루');
   await expect.poll(() => preview.evaluate((c: HTMLCanvasElement) => Array.from(c.getContext('2d')!.getImageData(0, 0, 1, 1).data))).toEqual([245, 237, 220, 255]);

@@ -21,7 +21,7 @@ async function seedHistory(page: Page, mode: 'half' | 'booth', mixed = false) {
 test('film variation review Original-only effect exposes original comparison', async ({ page }) => {
   await page.goto('/'); await expect(page.getByRole('button', { name: '원본보기', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: '스튜디오', exact: true }).click(); const studio = page.getByRole('dialog', { name: '스튜디오', exact: true });
-  await studio.getByRole('tab', { name: '효과', exact: true }).click(); await studio.getByRole('button', { name: '매 컷 새롭게', exact: true }).click(); await studio.getByRole('button', { name: '닫기', exact: true }).click();
+  await studio.getByRole('tab', { name: '효과', exact: true }).click(); await studio.locator('summary').filter({ hasText: '빈티지 패턴' }).click(); await studio.getByRole('button', { name: '매 컷 새롭게', exact: true }).click(); await studio.getByRole('button', { name: '닫기', exact: true }).click();
   await expect(page.getByRole('button', { name: '원본보기', exact: true })).toBeVisible();
 });
 
@@ -60,6 +60,7 @@ for (const mode of ['half', 'booth'] as const) test(`film variation review ${mod
 test('film variation review GPU allocation failure reports recovery and the live loop resumes after disabling', async ({ page }) => {
   await page.goto('/'); await page.getByRole('button', { name: '스튜디오', exact: true }).click(); const studio = page.getByRole('dialog', { name: '스튜디오', exact: true });
   await studio.getByRole('tab', { name: '효과', exact: true }).click();
+  await studio.locator('summary').filter({ hasText: '빈티지 패턴' }).click();
   await page.evaluate(() => {
     const original = WebGL2RenderingContext.prototype.createTexture;
     WebGL2RenderingContext.prototype.createTexture = function() { if (this.canvas === document.querySelector('.viewer > canvas')) return null; return original.call(this); };

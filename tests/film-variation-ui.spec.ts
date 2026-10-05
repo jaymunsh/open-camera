@@ -3,6 +3,8 @@ async function effects(page: Page) {
   await page.getByRole('button', { name: '스튜디오', exact: true }).click();
   const studio = page.getByRole('dialog', { name: '스튜디오', exact: true });
   await studio.getByRole('tab', { name: '효과', exact: true }).click();
+  const details = studio.locator('summary').filter({ hasText: '빈티지 패턴' }).locator('..');
+  if (await details.getAttribute('open') === null) await details.locator('summary').click();
   return studio;
 }
 test('film variation UI exposes opt-in additive controls and saves fixed recipes without stacking dialogs', async ({ page }) => {

@@ -11,7 +11,10 @@ export function CameraDialog({ title, onClose, children, busy = false, className
     const key = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !busyRef.current) close.current();
       if (e.key !== 'Tab') return;
-      const controls = [...(ref.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), summary, [tabindex="0"]') ?? [])].filter((el) => el.getClientRects().length > 0);
+      const controls = [...(ref.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), summary, [tabindex="0"]') ?? [])].filter((el) => {
+        const closed = el.closest('details:not([open])');
+        return el.getClientRects().length > 0 && (!closed || closed.firstElementChild === el);
+      });
       const first = controls[0], last = controls.at(-1);
       if (!first) { e.preventDefault(); ref.current?.focus(); return; }
       const outsideControls = !controls.includes(document.activeElement as HTMLElement);

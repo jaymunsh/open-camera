@@ -7,17 +7,20 @@ import { BoothControls } from './BoothControls';
 import { compositionLayout } from '../capture/composite';
 import { compositionPaper } from '../capture/paper';
 import { STUDIO_FILMS } from '../engine/lut';
+import { PAPERS } from '../capture/paper';
+import { StudioDisclosure } from './StudioDisclosure';
 
 export type CreativeOptions = Pick<CameraSettings, 'strengthMode' | 'gentle' | 'lens' | 'lensAmount'>;
 export const DEFAULT_CREATIVE: CreativeOptions = { strengthMode: 'color', gentle: false, lens: 'none', lensAmount: .5 };
 export type StudioTab = 'templates' | 'shooting' | 'effects';
 const TABS = [['templates', '템플릿'], ['shooting', '촬영 모드'], ['effects', '효과']] as const;
-export function CreativeSettings({ initialTab, mode, composition, boothMethod, boothInterval, methodLocked, working, onTemplate, onInstantFormat, selectedFilm, onFilm, onComposition, onBoothMethod, onBoothInterval, framePreview, variationControls, options, originals, locked, gentleAvailable, ratioIdx, ratioLocked, onRatio, lensPreview, onMode, onOptions, onOriginals, onClose }: {
+export function CreativeSettings({ initialTab, mode, composition, boothMethod, boothInterval, methodLocked, working, onTemplate, onInstantFormat, selectedFilm, onFilm, onComposition, onBoothMethod, onBoothInterval, framePreview, variationControls, variationSummary, options, originals, locked, gentleAvailable, ratioIdx, ratioLocked, onRatio, lensPreview, onMode, onOptions, onOriginals, onClose }: {
   initialTab: StudioTab; mode: CaptureMode; composition: CompositionOptions; boothMethod: BoothMethod;
   methodLocked: boolean; working: boolean; onTemplate: (options: CompositionOptions) => void; onBoothMethod: (method: BoothMethod) => void;
   boothInterval: BoothInterval; onBoothInterval: (interval: BoothInterval) => void;
   onComposition: (options: CompositionOptions) => void; framePreview: ReactNode;
   variationControls?: ReactNode;
+  variationSummary?: { mode: 'off' | 'new' | 'fixed'; warning: string | null; writable: boolean };
   onInstantFormat: (format: 'square' | 'portrait') => void; selectedFilm: string; onFilm: (id: string) => void;
   options: CreativeOptions; originals: boolean; locked: boolean; gentleAvailable: boolean; ratioIdx: number;
   ratioLocked: boolean; onRatio: (index: number) => void; lensPreview: ReactNode; onMode: (mode: CaptureMode) => void;
@@ -28,6 +31,7 @@ export function CreativeSettings({ initialTab, mode, composition, boothMethod, b
   const ratio = ratioIdx === 0 ? { w: 1, h: 1 } : ratioIdx === 1 ? { w: 4, h: 5 } : { w: 3, h: 4 };
   const ratioControls = <fieldset className="camera-field" disabled={ratioLocked}><legend>한 컷의 비율</legend><div className="camera-choices">{([[0, '1:1'], [2, '3:4'], [1, '4:5']] as const).map(([id, label]) => <button key={id} aria-pressed={ratioIdx === id} onClick={() => onRatio(id)}>{label}</button>)}</div></fieldset>;
   const boothControls = <BoothControls method={boothMethod} interval={boothInterval} locked={methodLocked} onMethod={onBoothMethod} onInterval={onBoothInterval} />;
+  const decoration = <StudioDisclosure title="프레임 꾸미기" summary={`${PAPERS.find((paper) => paper.id === composition.paper)?.label ?? '화이트'} · ${composition.frame === 'memory' && composition.caption?.trim() ? '문구 있음' : '문구 없음'}`} initiallyOpen={false}><FrameDecoration options={composition} disabled={working} onChange={onComposition} /></StudioDisclosure>;
   return <CameraDialog title="스튜디오" onClose={onClose} className="studio-dialog">
     <div className="studio-tabs" role="tablist" aria-label="스튜디오 메뉴">
       {TABS.map(([key, label], index) => <button key={key} role="tab" id={`${id}-${key}`} aria-selected={tab === key} aria-controls={`${id}-panel`} tabIndex={tab === key ? 0 : -1} onClick={() => setTab(key)} onKeyDown={(event) => {
@@ -45,12 +49,12 @@ export function CreativeSettings({ initialTab, mode, composition, boothMethod, b
         const r = layout.cells[0];
         return <button key={format} aria-pressed={mode === 'instant' && (composition.instantFormat ?? 'square') === format} disabled={working || (mode === 'instant' && ratioLocked)} onClick={() => onInstantFormat(format)}><svg aria-hidden="true" viewBox={`0 0 ${layout.width} ${layout.height}`}><rect width={layout.width} height={layout.height} fill={compositionPaper(composition).color} /><rect x={r.x} y={r.y} width={r.w} height={r.h} fill="#45424f" /></svg>{label}</button>;
       })}</div>
-      {mode === 'instant' && <FrameDecoration options={composition} disabled={working} onChange={onComposition} />}
+      {mode === 'instant' && decoration}
       <div className="studio-section-head"><h3>네 컷 프레임</h3><span>{mode === 'booth' ? '촬영 후에도 변경 가능' : '선택하면 네 컷 모드'}</span></div>
       <TemplateChooser options={composition} ratio={ratio} active={mode === 'booth'} disabled={working} onChoose={onTemplate} />
       {mode === 'booth' && <div className="studio-frame-settings">
-        <FrameDecoration options={composition} disabled={working} onChange={onComposition} />
         {ratioControls}{boothControls}
+        {decoration}
       </div>}
     </>}
     {tab === 'shooting' && <>
@@ -69,11 +73,16 @@ export function CreativeSettings({ initialTab, mode, composition, boothMethod, b
     <fieldset className="camera-field" disabled={locked}><legend>필터 강도 적용</legend><div className="camera-choices">{([['color', '색상만'], ['whole', '전체 룩']] as const).map(([id, label]) => <button key={id} aria-pressed={options.strengthMode === id} onClick={() => onOptions({ ...options, strengthMode: id })}>{label}</button>)}</div></fieldset>
     <label className="camera-check"><input type="checkbox" checked={options.gentle} disabled={locked || !gentleAvailable} onChange={(e) => onOptions({ ...options, gentle: e.target.checked })} />은은한 빈티지 질감</label>
     <p className="camera-note">기존은 유지하고 입자·빛샘을 줄입니다. 질감 효과가 있는 필터에서만 적용되며 디지캠은 제외합니다.</p>
-    <fieldset className="camera-field" disabled={locked}><legend>렌즈 효과</legend><div className="camera-choices">{([['none', '없음'], ['star', '빛줄기'], ['prism', '가장자리 굴절']] as const).map(([id, label]) => <button key={id} aria-pressed={options.lens === id} onClick={() => onOptions({ ...options, lens: id })}>{label}</button>)}</div>
+    <StudioDisclosure title="렌즈 효과" summary={options.lens === 'none' ? '꺼짐' : `${options.lens === 'star' ? '빛줄기' : '가장자리 굴절'} · ${Math.round(options.lensAmount * 100)}%`} initiallyOpen={options.lens !== 'none'}>
+    <fieldset className="camera-field" disabled={locked}><legend>렌즈 선택</legend><div className="camera-choices">{([['none', '없음'], ['star', '빛줄기'], ['prism', '가장자리 굴절']] as const).map(([id, label]) => <button key={id} aria-pressed={options.lens === id} onClick={() => onOptions({ ...options, lens: id })}>{label}</button>)}</div>
     {options.lens !== 'none' && <label className="camera-range">렌즈 강도 {Math.round(options.lensAmount * 100)}%<input aria-label="렌즈 강도" type="range" min={0} max={1} step={.01} value={options.lensAmount} onChange={(e) => onOptions({ ...options, lensAmount: Number(e.target.value) })} /></label>}</fieldset>
     <p className="camera-note">{options.lens === 'star' ? '밝은 조명이나 반사점에 빛줄기를 더합니다. 밝은 점이 없는 장면에서는 차이가 작아요.' : options.lens === 'prism' ? '가장자리에 색이 갈라지는 굴절을 더합니다. 중앙은 유지됩니다.' : '빛줄기는 밝은 조명에, 가장자리 굴절은 화면 가장자리에 적용됩니다.'}</p>
     {options.lens !== 'none' && lensPreview}
-    {variationControls}
+    </StudioDisclosure>
+    {variationControls && <>
+      {variationSummary?.warning && <p className="camera-warning" role="status">{variationSummary.warning}</p>}
+      <StudioDisclosure title="빈티지 패턴" summary={`${variationSummary?.mode === 'fixed' ? '고정 패턴' : variationSummary?.mode === 'new' ? '매 컷 새롭게' : '꺼짐'}${variationSummary?.writable === false ? ' · 저장 문제' : ''}`} initiallyOpen={variationSummary?.mode !== 'off' || !!variationSummary?.warning}>{variationControls}</StudioDisclosure>
+    </>}
     </>}
     </div>
   </CameraDialog>;

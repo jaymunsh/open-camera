@@ -124,7 +124,7 @@ test('lens comparison shows the same photo with and without edge refraction', as
   const encoded = await page.evaluate(() => { const c = document.createElement('canvas'); c.width = c.height = 256; const ctx = c.getContext('2d')!; for (let x = 0; x < 256; x += 8) { ctx.fillStyle = ['#f00', '#0f0', '#00f'][Math.floor(x / 8) % 3]; ctx.fillRect(x, 0, 8, 256); } return c.toDataURL('image/png').split(',')[1]; });
   await page.locator('input[type=file]').first().setInputFiles({ name: 'stripes.png', mimeType: 'image/png', buffer: Buffer.from(encoded, 'base64') });
   await expect(page.getByRole('button', { name: '저장', exact: true })).toBeEnabled();
-  await settings(page); await page.getByRole('tab', { name: '효과', exact: true }).click(); await page.getByRole('button', { name: '가장자리 굴절', exact: true }).click();
+await settings(page); await page.getByRole('tab', { name: '효과', exact: true }).click(); await page.locator('summary').filter({ hasText: '렌즈 효과' }).click(); await page.getByRole('button', { name: '가장자리 굴절', exact: true }).click();
   const base = page.getByLabel('렌즈 없음 비교', { exact: true }); const effect = page.getByLabel('가장자리 굴절 비교', { exact: true });
   await expect.poll(() => effect.evaluate((c: HTMLCanvasElement) => c.width)).toBeGreaterThan(0);
   const sample = (locator: typeof base, x: number) => locator.evaluate((c: HTMLCanvasElement, xpos) => Array.from(c.getContext('2d')!.getImageData(xpos, Math.floor(c.height / 2), 1, 1).data), x);

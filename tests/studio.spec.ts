@@ -126,7 +126,7 @@ test('Studio keyboard tabs switch panels and focus stays inside the dialog', asy
   await page.keyboard.press('Tab'); await expect(page.getByRole('tab', { name: '템플릿', exact: true })).toBeFocused();
   await page.keyboard.press('ArrowRight'); await expect(page.getByRole('tab', { name: '촬영 모드', exact: true })).toBeFocused();
   await page.keyboard.press('End'); await expect(page.getByRole('tab', { name: '효과', exact: true })).toBeFocused();
-  await expect(page.getByRole('button', { name: '빛줄기', exact: true })).toBeVisible();
+  await expect(page.locator('summary').filter({ hasText: '렌즈 효과' })).toBeVisible();
   for (let i = 0; i < 12; i++) { await page.keyboard.press('Tab'); expect(await page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'))).toBe(true); }
   await page.keyboard.press('Escape'); await expect(entry).toBeFocused();
 });

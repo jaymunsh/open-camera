@@ -5,7 +5,7 @@ for (const [name, width, height] of [['mobile', 430, 932], ['landscape', 844, 39
   test(`film variation visuals ${name} controls stay readable without horizontal overflow`, async ({ page }) => {
     await page.setViewportSize({ width, height }); await page.goto('/');
     await page.getByRole('button', { name: '스튜디오', exact: true }).click(); const studio = page.getByRole('dialog', { name: '스튜디오', exact: true });
-    await studio.getByRole('tab', { name: '효과', exact: true }).click(); await studio.getByRole('button', { name: '매 컷 새롭게', exact: true }).click();
+await studio.getByRole('tab', { name: '효과', exact: true }).click(); await studio.locator('summary').filter({ hasText: '빈티지 패턴' }).click(); await studio.getByRole('button', { name: '매 컷 새롭게', exact: true }).click();
     const controls = studio.getByRole('group', { name: '빈티지 우연성', exact: true });
     await controls.evaluate(el => el.scrollIntoView({ block: 'start' }));
     await controls.getByRole('button', { name: '매 컷 새롭게', exact: true }).focus();
