@@ -14,7 +14,7 @@ export type CreativeOptions = Pick<CameraSettings, 'strengthMode' | 'gentle' | '
 export const DEFAULT_CREATIVE: CreativeOptions = { strengthMode: 'color', gentle: false, lens: 'none', lensAmount: .5 };
 export type StudioTab = 'templates' | 'shooting' | 'effects';
 const TABS = [['templates', '템플릿'], ['shooting', '촬영 모드'], ['effects', '효과']] as const;
-export function CreativeSettings({ initialTab, mode, composition, boothMethod, boothInterval, methodLocked, working, onTemplate, onInstantFormat, selectedFilm, onFilm, onComposition, onBoothMethod, onBoothInterval, framePreview, variationControls, variationSummary, filmQualityControls, filmQualitySummary, options, originals, locked, effectsLocked = locked, gentleAvailable, ratioIdx, ratioLocked, onRatio, lensPreview, onMode, onOptions, onOriginals, onCancelEffects, onClearEffects, onClose }: {
+export function CreativeSettings({ initialTab, mode, composition, boothMethod, boothInterval, methodLocked, working, onTemplate, onInstantFormat, selectedFilm, onFilm, onComposition, onBoothMethod, onBoothInterval, framePreview, variationControls, variationSummary, filmQualityControls, filmQualitySummary, options, originals, locked, effectsLocked = locked, active = true, gentleAvailable, ratioIdx, ratioLocked, onRatio, lensPreview, onMode, onOptions, onOriginals, onCancelEffects, onClearEffects, onClose }: {
   initialTab: StudioTab; mode: CaptureMode; composition: CompositionOptions; boothMethod: BoothMethod;
   methodLocked: boolean; working: boolean; onTemplate: (options: CompositionOptions) => void; onBoothMethod: (method: BoothMethod) => void;
   boothInterval: BoothInterval; onBoothInterval: (interval: BoothInterval) => void;
@@ -22,6 +22,7 @@ export function CreativeSettings({ initialTab, mode, composition, boothMethod, b
   variationControls?: ReactNode;
   filmQualityControls?: ReactNode;
   effectsLocked?: boolean;
+  active?: boolean;
   filmQualitySummary?: { model: 'legacy' | 'film-v2'; grain: number; size: number };
   variationSummary?: { mode: 'off' | 'new' | 'fixed'; warning: string | null; writable: boolean };
   onInstantFormat: (format: 'square' | 'portrait') => void; selectedFilm: string; onFilm: (id: string) => void;
@@ -37,7 +38,7 @@ export function CreativeSettings({ initialTab, mode, composition, boothMethod, b
   const ratioControls = <fieldset className="camera-field" disabled={ratioLocked}><legend>한 컷의 비율</legend><div className="camera-choices">{([[0, '1:1'], [2, '3:4'], [1, '4:5']] as const).map(([id, label]) => <button key={id} aria-pressed={ratioIdx === id} onClick={() => onRatio(id)}>{label}</button>)}</div></fieldset>;
   const boothControls = <BoothControls method={boothMethod} interval={boothInterval} locked={methodLocked} onMethod={onBoothMethod} onInterval={onBoothInterval} />;
   const decoration = <StudioDisclosure title="프레임 꾸미기" summary={`${PAPERS.find((paper) => paper.id === composition.paper)?.label ?? '화이트'} · ${composition.frame === 'memory' && composition.caption?.trim() ? '문구 있음' : '문구 없음'}`} initiallyOpen={false}><FrameDecoration options={composition} disabled={working} onChange={onComposition} /></StudioDisclosure>;
-  return <CameraDialog title="스튜디오" onClose={onClose} className="studio-dialog" footer={tab === 'effects' && <div className="studio-effect-actions" role="group" aria-label="스튜디오 효과 작업"><button disabled={effectsLocked || working} onClick={onClearEffects}>효과 해제</button><button disabled={effectsLocked || working} onClick={onCancelEffects}>변경 취소</button></div>}>
+  return <CameraDialog title="스튜디오" active={active} onClose={onClose} className="studio-dialog" footer={tab === 'effects' && <div className="studio-effect-actions" role="group" aria-label="스튜디오 효과 작업"><button disabled={effectsLocked || working} onClick={onClearEffects}>효과 해제</button><button disabled={effectsLocked || working} onClick={onCancelEffects}>변경 취소</button></div>}>
     <div className="studio-tabs" role="tablist" aria-label="스튜디오 메뉴">
       {TABS.map(([key, label], index) => <button key={key} role="tab" id={`${id}-${key}`} aria-selected={tab === key} aria-controls={`${id}-panel`} tabIndex={tab === key ? 0 : -1} onClick={() => setTab(key)} onKeyDown={(event) => {
         const next = event.key === 'ArrowRight' ? (index + 1) % TABS.length : event.key === 'ArrowLeft' ? (index + TABS.length - 1) % TABS.length : event.key === 'Home' ? 0 : event.key === 'End' ? TABS.length - 1 : null;

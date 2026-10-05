@@ -35,7 +35,7 @@ export function StudioFramePreview({ source, frames, options, ratio, mode = 'boo
     };
     void prepare().catch(() => { if (live) setStatus('미리보기를 불러오지 못했어요. 스튜디오를 닫고 다시 열어주세요.'); });
     return () => { live = false; };
-  }, [source, params, lut, lutKey, amount, fx, look.lens, look.lensAmount, look.gentle, ready, ratio.w, ratio.h, inputs, sampleId]);
+  }, [source, params, lut, lutKey, amount, fx, look.lens, look.lensAmount, look.gentle, look.filmQuality, ready, ratio.w, ratio.h, inputs, sampleId]);
   useEffect(() => {
     const c = ref.current;
     if (!c || !scene) return;

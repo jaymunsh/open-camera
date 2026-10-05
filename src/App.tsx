@@ -57,6 +57,7 @@ import { LensComparison } from './components/LensComparison';
 import { CameraInfo } from './components/CameraInfo';
 import { FilmVariationControls } from './components/FilmVariationControls';
 import { FilmQualityControls } from './components/FilmQualityControls';
+import { FilmTextureComparison } from './components/FilmTextureComparison';
 import { PreviewSourcePicker } from './components/PreviewSourcePicker';
 import { LutComparison } from './components/LutComparison';
 import { SettingsOverview, type SettingsDestination, type SettingsSnapshot } from './components/SettingsOverview';
@@ -198,6 +199,11 @@ export default function App() {
   const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
   const comparisonEpoch = useRef(0);
   const comparisonFocus = useRef<HTMLElement | null>(null);
+  const [textureComparison, setTextureComparison] = useState<{ source: PreviewSource; settings: CameraSettings; lut: LutData | null } | null>(null);
+  const [textureLoading, setTextureLoading] = useState(false);
+  const [textureError, setTextureError] = useState<string | null>(null);
+  const textureEpoch = useRef(0); const textureFocus = useRef<HTMLElement | null>(null);
+  useEffect(() => () => textureComparison?.source.release(), [textureComparison]);
   useEffect(() => { try { localStorage.setItem('oc-datestyle', dateStyle); localStorage.setItem('oc-keep-original', keepOriginal ? '1' : '0'); } catch { /* defaults remain usable when storage is blocked */ } }, [dateStyle, keepOriginal]);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -693,7 +699,23 @@ export default function App() {
     ...customs.map((custom) => ({ id: custom.id, label: custom.name, custom: true })),
   ], [customs]);
   const previewOptions = useMemo(() => ({ sampleId: preview.sourceKind === 'sample' ? preview.sampleId : undefined,
-    source: preview.thumbnailSource, sourceVersion: preview.sourceKey, srcKey: preview.sourceKey }), [preview.sourceKind, preview.sampleId, preview.thumbnailSource, preview.sourceKey]);
+    source: preview.thumbnailSource, sourceVersion: preview.sourceKey, srcKey: preview.sourceKey, filmQuality: filmQuality.settings }), [preview.sourceKind, preview.sampleId, preview.thumbnailSource, preview.sourceKey, filmQuality.settings]);
+  const openTextureComparison = async () => {
+    if (settingsWriteLocked.current || !renderReady || textureLoading) return;
+    const token = ++textureEpoch.current; textureFocus.current = document.activeElement as HTMLElement | null;
+    const settings = structuredClone(generalSettings); const lut = lutId === 'none' ? null : loadedLuts[lutId];
+    setTextureLoading(true); setTextureError(null);
+    try {
+      const source = await preview.prepareComparison();
+      if (token !== textureEpoch.current || settingsWriteLocked.current) { source.release(); return; }
+      setTextureComparison({ source, settings, lut });
+    } catch (error) { if (token === textureEpoch.current) setTextureError(error instanceof Error ? error.message : '비교 사진을 불러오지 못했어요. 다시 시도해주세요.'); }
+    finally { if (token === textureEpoch.current) setTextureLoading(false); }
+  };
+  const closeTextureComparison = () => {
+    textureEpoch.current++; setTextureComparison(null); setTextureLoading(false);
+    requestAnimationFrame(() => textureFocus.current?.focus());
+  };
   useEffect(() => () => comparisonSource?.release(), [comparisonSource]);
   const closeComparison = () => {
     comparisonEpoch.current++; setComparisonSource(null); setComparisonLoading(false); setComparisonError(null);
@@ -1527,7 +1549,7 @@ export default function App() {
           onSelect={selectFilm}
           getSource={getSource}
           onExpand={() => setSheetOpen(true)}
-          deps={[thumbKey, customs, preview.sourceKey]}
+          deps={[thumbKey, customs, preview.sourceKey, qualityKey]}
           customs={customs}
           srcKey={mode === 'edit' && editSrc ? `e${editToken}` : 'smp'}
           preferSrc={mode === 'edit'}
@@ -1733,6 +1755,7 @@ export default function App() {
       )}
 
       {creativeOpen && <CreativeSettings
+        active={!textureComparison}
         initialTab={studioTab}
         mode={creative.mode}
         composition={creative.options}
@@ -1745,7 +1768,7 @@ framePreview={<StudioFramePreview sampleId={preview.sampleId} source={studioPrev
         selectedFilm={lutId}
         variationSummary={{ mode: variation.settings.mode, warning: variation.warning, writable: variation.writable }}
         filmQualitySummary={{ model: filmQuality.settings?.model ?? 'legacy', grain: look.filmQuality?.grain ?? 0, size: filmQuality.settings?.size ?? DEFAULT_FILM_QUALITY.size }}
-        filmQualityControls={<FilmQualityControls settings={filmQuality.settings} locked={busy || creative.working || qualityLocked || !renderReady} warning={filmQuality.warning} onChange={settings => { if (!settingsWriteLocked.current && renderReady) filmQuality.update(settings); }} />}
+        filmQualityControls={<><FilmQualityControls settings={filmQuality.settings} locked={busy || creative.working || qualityLocked || !renderReady || textureLoading} warning={filmQuality.warning} onChange={settings => { if (!settingsWriteLocked.current && renderReady) filmQuality.update(settings); }} onCompare={() => void openTextureComparison()} />{textureLoading && <p role="status" className="camera-note">비교 사진 준비 중…</p>}{textureError && <p role="alert" className="camera-warning">{textureError}</p>}</>}
         onFilm={(id) => {
           if (id === 'none' && id !== lutId) preservePresetFx.current = true;
           selectFilm(id);
@@ -1782,9 +1805,10 @@ framePreview={<StudioFramePreview sampleId={preview.sampleId} source={studioPrev
         onOriginals={setKeepOriginal}
         onCancelEffects={cancelStudioEffects}
         onClearEffects={clearStudioEffects}
-        onClose={() => setCreativeOpen(false)}
+        onClose={() => { textureEpoch.current++; setTextureLoading(false); setCreativeOpen(false); }}
       />}
       {recipeOpen && <RecipeSheet settings={generalSettings} onApply={settings => applyCameraSettings(settings)} onClose={() => setRecipeOpen(false)} />}
+      {textureComparison && <FilmTextureComparison {...textureComparison} onClose={closeTextureComparison} />}
       {settingsOverviewOpen && <SettingsOverview snapshot={settingsSnapshot} unavailable={unavailableSettings} onClose={closeSettingsOverview} onNavigate={navigateSettings} />}
       {creative.historyOpen && <PhotoHistory active={!comparisonSource} records={creative.records} warning={creative.warning} onClose={() => { comparisonEpoch.current++; creative.setHistoryOpen(false); }} onDelete={creative.remove} onReprocess={reprocessPhoto} onCompare={(record) => void openComparison(record)} />}
       {comparisonSource && <LutComparison source={comparisonSource} choices={comparisonChoices} selectedId={lutId} locked={busy || creative.working || creative.locked || pendingLut || preview.busy || !!preview.error} onApply={applyComparison} onClose={closeComparison}

@@ -4,20 +4,27 @@ import { DEFAULT_PARAMS, type FxSpec } from '../engine/types';
 import { ASSET_VERSION } from '../utils/assets';
 import { loadSample, SAMPLES, type SampleId } from '../preview/samples';
 import { ThumbnailCache } from '../preview/thumbnailCache';
+import { resolveFilmQuality, type FilmQualitySettings } from '../engine/filmQuality';
+import { createSignatureQuality, signatureFilm } from '../engine/signatureFilms';
 
 let thumbCanvas: HTMLCanvasElement | null = null;
 let thumbPipe: FilterPipeline | null = null;
 let legacySample: Promise<HTMLImageElement> | null = null;
 const cache = new ThumbnailCache();
 let queue: Promise<void> = Promise.resolve();
-export interface ThumbItem { id: string; custom?: boolean; fx?: FxSpec; version?: string; amount?: number }
-export interface ThumbnailOptions { srcKey?: string; preferSrc?: boolean; sampleId?: SampleId; source?: TexImageSource | null; sourceVersion?: string; onError?: (id: string, message: string) => void }
+export interface ThumbItem { id: string; custom?: boolean; fx?: FxSpec; version?: string; amount?: number; filmQuality?: FilmQualitySettings }
+export interface ThumbnailOptions { srcKey?: string; preferSrc?: boolean; sampleId?: SampleId; source?: TexImageSource | null; sourceVersion?: string; filmQuality?: FilmQualitySettings; onError?: (id: string, message: string) => void }
+function qualityFor(item: ThumbItem, opts: ThumbnailOptions): FilmQualitySettings | undefined {
+  if (item.filmQuality) return item.filmQuality;
+  if (opts.filmQuality?.origin === 'manual') return opts.filmQuality;
+  return signatureFilm(item.id) ? createSignatureQuality(item.id, opts.filmQuality?.seed ?? .5) : undefined;
+}
 const stableFx = (fx?: FxSpec) => fx ? Object.keys(fx).sort().map((key) => [key, fx[key as keyof FxSpec]]) : null;
 function sourceKey(opts: ThumbnailOptions): string {
   return JSON.stringify([opts.srcKey ?? 'smp', opts.sampleId ?? null, opts.sourceVersion ?? (opts.sampleId ? SAMPLES.find((s) => s.id === opts.sampleId)?.version : ASSET_VERSION)]);
 }
 function key(item: ThumbItem, opts: ThumbnailOptions): string {
-  return JSON.stringify([sourceKey(opts), item.id, !!item.custom, item.version ?? ASSET_VERSION, item.id === 'none' ? 0 : item.amount ?? 1, stableFx(item.fx)]);
+  return JSON.stringify([sourceKey(opts), item.id, !!item.custom, item.version ?? ASSET_VERSION, item.id === 'none' ? 0 : item.amount ?? 1, stableFx(item.fx), qualityFor(item, opts) ?? null]);
 }
 export function getSampleImage(sampleId?: SampleId): Promise<HTMLImageElement> {
   if (sampleId) return loadSample(sampleId);
@@ -52,7 +59,8 @@ export async function renderPresetThumbs(refs: Map<HTMLCanvasElement, string>, i
           const lut = item.custom ? await loadCustomLut(item.id) : await loadPresetLut(item.id);
           if (cancelled()) return;
           pipe.setFx(item.fx ? { ...item.fx, seed: .37 } : null); pipe.setLUT(JSON.stringify([item.id, item.version ?? ASSET_VERSION, !!item.custom]), lut);
-          pipe.render(DEFAULT_PARAMS, item.id === 'none' ? 0 : item.amount ?? 1, { fit: 'cover' });
+          const filmQuality = resolveFilmQuality(qualityFor(item, opts), { params: DEFAULT_PARAMS, fx: item.fx ?? null, intensity: item.amount ?? 1, strengthMode: 'color', grainOff: false, pattern: null });
+          pipe.render(DEFAULT_PARAMS, item.id === 'none' ? 0 : item.amount ?? 1, { fit: 'cover', look: { lens: 'none', lensAmount: 0, gentle: false, filmQuality } });
           thumb = document.createElement('canvas'); thumb.width = thumb.height = 128; thumb.getContext('2d')!.drawImage(canvas, 0, 0); cache.set(cacheKey, thumb);
         } catch (error) {
           opts.onError?.(item.id, error instanceof Error ? error.message : '필터를 불러오지 못했어요.');

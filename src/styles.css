@@ -151,6 +151,9 @@ body,
 .comparison-dialog .camera-primary { margin: 0; }
 .comparison-dialog input { caret-color: var(--camera-accent); }
 .comparison-dialog ::selection { color: #100d20; background: var(--camera-accent); }
+.texture-comparison-dialog .comparison-body { display: block; }
+.texture-comparison-dialog .comparison-toolbar { margin-block: 12px 16px; }
+.texture-comparison-dialog .comparison-photo { display: block; }
 @media (max-height: 480px) { .comparison-photo { height: 190px; } }
 .studio-dialog { display: flex; flex-direction: column; overflow: hidden; padding: 0; }
 .studio-dialog .camera-dialog-head { flex: none; margin: 0; padding: 16px 18px 12px; }
@@ -238,6 +241,7 @@ body,
 @media (prefers-reduced-motion: reduce) { .studio-tabs button { transition: none; } }
 @media (max-height: 480px) { .studio-preview-stage { height: 120px; } }
 @media (min-width: 640px) and (max-height: 480px) {
+  .texture-comparison-dialog .comparison-body { display: grid; }
   .comparison-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 16px; align-content: start; }
   .comparison-body > * { min-width: 0; grid-column: 2; }
   .comparison-body > .comparison-stage { grid-column: 1; grid-row: 1 / 5; min-height: 180px; align-self: start; margin-top: 8px; }
