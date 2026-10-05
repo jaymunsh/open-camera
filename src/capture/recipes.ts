@@ -1,6 +1,7 @@
 import { DEFAULT_BEAUTY } from '../components/BeautyPanel';
 import { PARAM_DEFS } from '../engine/types';
 import { validateVariation } from '../engine/variation';
+import { assertFilmQualityForPreset } from '../engine/filmQuality';
 import type { CameraSettings } from './types';
 
 export interface Recipe { version: 1; id: string; name: string; settings: CameraSettings }
@@ -17,7 +18,8 @@ export function validateSettings(input: unknown): CameraSettings {
   if (!Number.isFinite(s.lensAmount) || s.lensAmount < 0 || s.lensAmount > 1) throw new Error('렌즈 강도가 올바르지 않습니다');
   enumValue(s.date?.mode, ['auto', 'on', 'off']); enumValue(s.date?.fmt, ['yy', 'iso', 'ddmmyy', 'ddmmyyyy', 'mmddyyyy']);
   enumValue(s.date?.size, ['sm', 'md', 'lg']); enumValue(s.date?.orient, ['auto', 'p', 'l']); enumValue(s.date?.style, ['amber', 'red']);
-  return { ...structuredClone(s), variation: validateVariation(s.variation) };
+  const filmQuality = assertFilmQualityForPreset(s.lutId, s.filmQuality);
+  return { ...structuredClone(s), variation: validateVariation(s.variation), ...(filmQuality ? { filmQuality } : {}) };
 }
 export function readRecipes(): Recipe[] {
   const json = localStorage.getItem(KEY);
