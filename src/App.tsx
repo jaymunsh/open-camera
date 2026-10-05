@@ -55,6 +55,8 @@ import { CameraInfo } from './components/CameraInfo';
 import { FilmVariationControls } from './components/FilmVariationControls';
 import { PreviewSourcePicker } from './components/PreviewSourcePicker';
 import { LutComparison } from './components/LutComparison';
+import { SettingsOverview, type SettingsDestination, type SettingsSnapshot } from './components/SettingsOverview';
+import { SettingsSummary } from './components/SettingsSummary';
 import { usePreviewSource } from './preview/usePreviewSource';
 import { SAMPLES } from './preview/samples';
 import type { PreviewSource } from './preview/source';
@@ -131,6 +133,12 @@ export default function App() {
   const compositeDrawRef = useRef<PreviewDraw>(null);
   const [gridOn, setGridOn] = useState(() => localStorage.getItem('oc-grid') === '1');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [settingsOverviewOpen, setSettingsOverviewOpen] = useState(false);
+  const settingsOverviewFocus = useRef<HTMLElement | null>(null);
+  const [showSettingsSummary, setShowSettingsSummary] = useState(() => {
+    try { return localStorage.getItem('oc-settings-summary') === '1'; } catch { return false; }
+  });
+  useEffect(() => { try { localStorage.setItem('oc-settings-summary', showSettingsSummary ? '1' : '0'); } catch { /* usable for this session */ } }, [showSettingsSummary]);
   const [dateMode, setDateMode] = useState<'auto' | 'on' | 'off'>(() => {
     const v = localStorage.getItem('oc-datemode');
     return v === 'on' || v === 'off' ? v : 'auto';
@@ -462,11 +470,18 @@ export default function App() {
   });
 
   const fxSeedRef = useRef(0.5);
+  const preservePresetFx = useRef(false);
+  const [studioEffectsRevision, setStudioEffectsRevision] = useState(0);
+  const studioEffectsEntry = useRef<{
+    settings: CameraSettings; pattern: FilmPattern | null; fxSeed: number;
+    recordId?: string; editPatterns?: (FilmPattern | null)[]; frameSettings?: CameraSettings[];
+  } | null>(null);
   useEffect(() => {
-    if (!comparisonApplying.current) fxSeedRef.current = Math.random();
-    if (!recipeApplying.current && !comparisonApplying.current) setGrainOff(false);
+    if (!comparisonApplying.current && !preservePresetFx.current) fxSeedRef.current = Math.random();
+    if (!recipeApplying.current && !comparisonApplying.current && !preservePresetFx.current) setGrainOff(false);
     recipeApplying.current = false;
     comparisonApplying.current = false;
+    preservePresetFx.current = false;
   }, [lutId]);
 
   useEffect(() => {
@@ -481,7 +496,7 @@ export default function App() {
         ? { ...preset.fx, grain: grainOff ? 0 : preset.fx.grain, seed: fxSeedRef.current }
         : null, lutIntensity, creativeOptions.strengthMode, look.gentle),
     });
-  }, [lutId, lutReady, loadedLuts, lutIntensity, grainOff, creativeOptions.strengthMode, look.gentle]);
+  }, [lutId, lutReady, loadedLuts, lutIntensity, grainOff, creativeOptions.strengthMode, look.gentle, studioEffectsRevision]);
 
   const showDate = dateMode === 'on' || (dateMode === 'auto' && !!applied.fx?.date);
   const renderReady = lutReady && applied.key === `preset-${lutId}` && applied.lut === (lutId === 'none' ? null : loadedLuts[lutId]) && applied.amount === (lutId === 'none' ? 0 : lutIntensity);
@@ -1115,6 +1130,8 @@ export default function App() {
   const guideImage = useMemo(() => creative.mode === 'double' && creative.frames[0] ? creative.frames[0].canvas.toDataURL('image/jpeg', .75) : null, [creative.mode, creative.frames]);
   const openStudio = (tab: StudioTab) => {
     cancelCountdown(); creative.pause();
+    studioEffectsEntry.current = structuredClone({ settings: generalSettings, pattern: variation.pattern, fxSeed: fxSeedRef.current,
+      recordId: reprocessRecord?.id, editPatterns, frameSettings: reprocessRecord?.frameSettings });
     const source = getSource();
     setLensPreviewSource(source ? snapshotFrame(source, mode === 'camera' ? ratio : null, mode === 'camera' && facing === 'user', 512) : null);
     setStudioPreviewSource(source ? snapshotFrame(source, null, false, 768) : null);
@@ -1129,6 +1146,71 @@ export default function App() {
     setStudioOpenedAt(Date.now());
     setStudioTab(tab); setMenuOpen(false); setCreativeOpen(true);
   };
+  const cancelStudioEffects = () => {
+    const entry = studioEffectsEntry.current;
+    if (!entry || busy || creative.working || creative.locked) return;
+    const s = entry.settings;
+    // Restore the exact grain seed and mute flag, not the usual new-filter defaults.
+    preservePresetFx.current = s.lutId !== lutId;
+    fxSeedRef.current = entry.fxSeed;
+    // Even a reselected entry LUT needs a new applied-FX object with its old seed.
+    setStudioEffectsRevision(value => value + 1);
+    setLutId(s.lutId); setLutIntensity(s.intensity); setGrainOff(s.grainOff);
+    setCreativeOptions({ strengthMode: s.strengthMode, gentle: s.gentle, lens: s.lens, lensAmount: s.lensAmount });
+    variation.apply(validateVariation(s.variation), entry.pattern);
+    if (entry.recordId && reprocessRecord?.id === entry.recordId) {
+      setEditPatterns(entry.editPatterns);
+      setReprocessRecord(record => record && record.id === entry.recordId ? { ...record, frameSettings: entry.frameSettings } : record);
+    }
+    setCreativeOpen(false);
+  };
+  const clearStudioEffects = () => {
+    if (busy || creative.working || creative.locked) return;
+    setLutId('none'); setLutIntensity(1); setGrainOff(false); setCreativeOptions({ ...DEFAULT_CREATIVE });
+    changeVariation({ ...variation.settings, mode: 'off' });
+  };
+  const openSettingsOverview = () => {
+    if (busy || creative.working) return;
+    settingsOverviewFocus.current = document.activeElement as HTMLElement | null;
+    cancelCountdown(); creative.pause(); setMenuOpen(false); setSettingsOverviewOpen(true);
+  };
+  const closeSettingsOverview = () => {
+    const previous = settingsOverviewFocus.current;
+    settingsOverviewFocus.current = null;
+    setSettingsOverviewOpen(false);
+    requestAnimationFrame(() => {
+      if (document.querySelector('[role="dialog"]')) return;
+      if (previous?.isConnected && previous.getClientRects().length) previous.focus();
+      else document.querySelector<HTMLButtonElement>('button[aria-label="메뉴"]')?.focus();
+    });
+  };
+  const unavailableSettings: Partial<Record<SettingsDestination, string>> = {};
+  if (creative.locked || busy || creative.working) {
+    for (const destination of ['filters', 'adjust', 'beauty'] as const) unavailableSettings[destination] = '촬영 중에는 이 설정을 바꿀 수 없어요.';
+  }
+  if (reprocessRecord && reprocessRecord.mode !== 'normal') unavailableSettings.beauty = '합성 사진 다시 현상에서는 미용 보정을 지원하지 않아요.';
+  const navigateSettings = (destination: SettingsDestination) => {
+    if (unavailableSettings[destination] || busy || creative.working) return;
+    setSettingsOverviewOpen(false);
+    if (destination === 'shooting' || destination === 'templates' || destination === 'effects') openStudio(destination);
+    else if (destination === 'filters') setSheetOpen(true);
+    else if (destination === 'date') setDateSheet(true);
+    else setPanel(destination);
+  };
+  const settingsSnapshot: SettingsSnapshot = {
+    settings: generalSettings,
+    filterLabel: customs.find(c => c.id === lutId)?.name ?? PRESETS.find(p => p.id === lutId)?.label ?? '불러온 필름',
+    source: mode, captureMode: mode === 'edit' ? reprocessRecord?.mode ?? 'normal' : creative.mode,
+    ratioLabel: mode === 'camera' ? ratio.label : reprocessRecord ? RATIOS[reprocessRecord.frameSettings?.[0]?.ratioIdx ?? reprocessRecord.settings?.ratioIdx ?? ratioIdx]?.label ?? '원본 비율' : '원본 비율',
+    composition: mode === 'edit' && reprocessRecord?.composition ? reprocessRecord.composition : creative.options,
+    boothMethod: creative.boothMethod, boothInterval: creative.boothInterval, grid: gridOn, timer: timerSec,
+    originals: keepOriginal, facing, zoom: mode === 'camera' ? inspectCamera()?.zoom ?? null : null,
+    torch: facing === 'environment' && torchOk ? torchOn ? 'on' : 'off' : 'unavailable',
+    gentleAvailable, showDate, beautyAvailable: !reprocessRecord || reprocessRecord.mode === 'normal',
+    patternSeed: previewPattern?.seed ?? null,
+    mixedPatterns: !!editPatterns && (new Set(editPatterns.map(p => p?.seed ?? null)).size > 1),
+  };
+  const settingsCovered = creativeOpen || creative.review || creative.historyOpen || sheetOpen || dateSheet || recipeOpen || settingsOverviewOpen || licOpen || lutModalOpen || !!comparisonSource;
 
   return (
     <div className="app">
@@ -1173,6 +1255,8 @@ export default function App() {
             </button>
             {menuOpen && (
               <div className="menu">
+                <button role="switch" aria-checked={showSettingsSummary} aria-label="설정 요약 표시" onClick={() => { setShowSettingsSummary(value => !value); setMenuOpen(false); }}>설정 요약 표시<span>{showSettingsSummary ? '켜짐' : '꺼짐'}</span></button>
+                <button disabled={busy || creative.working} onClick={openSettingsOverview}>전체 설정 보기</button>
                 <button disabled={busy || creative.working} onClick={() => { cancelCountdown(); creative.pause(); setMenuOpen(false); creative.setHistoryOpen(true); }}>최근 촬영</button>
                 <button disabled={busy || creative.working} onClick={() => openStudio('shooting')}>촬영 모드 · 효과</button>
                 <button disabled={busy || creative.working || creative.locked || pendingLut} onClick={() => { setMenuOpen(false); setRecipeOpen(true); }}>카메라 레시피</button>
@@ -1275,7 +1359,8 @@ export default function App() {
       >
         <canvas ref={canvasRef} />
         <video ref={videoRef} playsInline muted autoPlay onLoadedData={onLoaded} />
-        {mode === 'camera' && (creative.mode === 'half' || creative.mode === 'booth' || creative.mode === 'instant') && sourceFrameRect && !creative.review && <CapturePreview mode={creative.mode} frames={creative.frames} options={creative.options} nextIndex={creative.nextIndex} countdown={creative.countdown} gridOn={gridOn} ratio={ratio} sourceRect={sourceFrameRect} viewSize={viewSize} drawRef={compositeDrawRef} size={capturePreviewSize} onSize={setCapturePreviewSize} bottomInset={canCompare || showDate || (ready && zoomCaps && zoomOptions.length > 1) ? 68 : 12} />}
+        {mode === 'camera' && (creative.mode === 'half' || creative.mode === 'booth' || creative.mode === 'instant') && sourceFrameRect && !creative.review && <CapturePreview mode={creative.mode} frames={creative.frames} options={creative.options} nextIndex={creative.nextIndex} countdown={creative.countdown} gridOn={gridOn} ratio={ratio} sourceRect={sourceFrameRect} viewSize={viewSize} drawRef={compositeDrawRef} size={capturePreviewSize} onSize={setCapturePreviewSize} avoidSettingsSummary={showSettingsSummary} bottomInset={canCompare || showDate || (ready && zoomCaps && zoomOptions.length > 1) ? 68 : 12} />}
+        {showSettingsSummary && <SettingsSummary snapshot={settingsSnapshot} compositeSize={capturePreviewSize} covered={settingsCovered} onOpen={openSettingsOverview} />}
         {mode === 'camera' && tiledMode && creative.countdown !== null && sourceFrameRect && <span className="capture-countdown" aria-hidden="true" style={{ left: sourceFrameRect.left + sourceFrameRect.w / 2, top: sourceFrameRect.top + sourceFrameRect.h / 2 }}>{creative.countdown}</span>}
         {mode === 'camera' && guideImage && frameRect && !creative.review && <img className="exposure-guide" src={guideImage} alt="첫 촬영 구도 안내" style={{ left: frameRect.left, top: frameRect.top, width: frameRect.w, height: frameRect.h }} />}
         {mode === 'camera' && creative.mode !== 'normal' && <div className="capture-progress" role="status" onPointerDown={(e) => e.stopPropagation()}>
@@ -1620,7 +1705,10 @@ framePreview={<StudioFramePreview sampleId={preview.sampleId} source={studioPrev
         variationControls={<FilmVariationControls settings={variation.settings} locked={busy || creative.working || creative.locked || pendingLut} warning={variation.warning} writable={variation.writable} notice={reprocessRecord ? `다른 패턴은 전체 컷에 적용해요. 고정하면 마지막 컷의 패턴을 전체 컷에 사용해요.${editPatterns?.at(-1) === null ? ' 마지막 컷에 패턴이 없으면 새 패턴으로 고정해요.' : ''}` : undefined} onChange={changeVariation} onReroll={rerollVariation} onFreeze={freezeVariation} onSaveRecipe={() => { setCreativeOpen(false); setRecipeOpen(true); }} onReset={() => { variation.resetStored(); if (reprocessRecord) { setEditPatterns(Array(reprocessRecord.originals.length).fill(null)); updateEditVariation(DEFAULT_VARIATION); } }} />}
         selectedFilm={lutId}
         variationSummary={{ mode: variation.settings.mode, warning: variation.warning, writable: variation.writable }}
-        onFilm={setLutId}
+        onFilm={(id) => {
+          if (id === 'none' && id !== lutId) preservePresetFx.current = true;
+          setLutId(id);
+        }}
         onInstantFormat={(format) => {
           if (!creative.changeMode('instant')) return;
           if (mode === 'edit') { setReprocessRecord(null); setMode('camera'); }
@@ -1636,7 +1724,7 @@ framePreview={<StudioFramePreview sampleId={preview.sampleId} source={studioPrev
         }}
         options={creativeOptions}
         originals={keepOriginal}
-        locked={creative.locked}
+        locked={creative.locked || busy}
         gentleAvailable={gentleAvailable}
         ratioIdx={tiledMode ? captureRatioIdx : compositeRatioIdx}
         ratioLocked={creative.frames.length > 0 || creative.working}
@@ -1650,9 +1738,12 @@ framePreview={<StudioFramePreview sampleId={preview.sampleId} source={studioPrev
         }}
         onOptions={setCreativeOptions}
         onOriginals={setKeepOriginal}
+        onCancelEffects={cancelStudioEffects}
+        onClearEffects={clearStudioEffects}
         onClose={() => setCreativeOpen(false)}
       />}
       {recipeOpen && <RecipeSheet settings={generalSettings} onApply={applyCameraSettings} onClose={() => setRecipeOpen(false)} />}
+      {settingsOverviewOpen && <SettingsOverview snapshot={settingsSnapshot} unavailable={unavailableSettings} onClose={closeSettingsOverview} onNavigate={navigateSettings} />}
       {creative.historyOpen && <PhotoHistory active={!comparisonSource} records={creative.records} warning={creative.warning} onClose={() => { comparisonEpoch.current++; creative.setHistoryOpen(false); }} onDelete={creative.remove} onReprocess={reprocessPhoto} onCompare={(record) => void openComparison(record)} />}
       {comparisonSource && <LutComparison source={comparisonSource} choices={comparisonChoices} selectedId={lutId} locked={busy || creative.working || creative.locked || pendingLut || preview.busy || !!preview.error} onApply={applyComparison} onClose={closeComparison}
         sourceLoading={comparisonLoading} sourceError={comparisonError} onRetrySource={() => void changePreview(preview.retry)}

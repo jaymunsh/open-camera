@@ -4,13 +4,14 @@ import type { CapturedFrame, CompositionOptions } from '../capture/types';
 
 export type PreviewDraw = ((source: HTMLCanvasElement) => void) | null;
 export type PreviewSize = 'small' | 'large' | 'folded';
-export function CapturePreview({ mode, frames, options, nextIndex, countdown, gridOn, ratio, sourceRect, viewSize, drawRef, size, onSize, bottomInset }: {
+export function CapturePreview({ mode, frames, options, nextIndex, countdown, gridOn, ratio, sourceRect, viewSize, drawRef, size, onSize, bottomInset, avoidSettingsSummary = false }: {
   mode: 'half' | 'booth' | 'instant'; frames: CapturedFrame[]; options: CompositionOptions; nextIndex: number;
   countdown: number | null; gridOn: boolean;
   ratio: { w: number; h: number };
   sourceRect: { left: number; top: number; w: number; h: number };
   viewSize: { w: number; h: number }; drawRef: MutableRefObject<PreviewDraw>;
   size: PreviewSize; onSize: (size: PreviewSize) => void; bottomInset: number;
+  avoidSettingsSummary?: boolean;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -32,7 +33,11 @@ export function CapturePreview({ mode, frames, options, nextIndex, countdown, gr
       const header = document.querySelector<HTMLElement>('.app-header');
       const inset = Math.max(12, header ? parseFloat(getComputedStyle(header).paddingRight) || 0 : 0);
       const w = Math.max(100, Math.min(size === 'large' ? 320 : 168, r.width - inset * 2));
-      const minTop = r.top + 8, maxBottom = dock.getBoundingClientRect().top - 8;
+      let minTop = r.top + 8;
+      const summary = avoidSettingsSummary ? document.querySelector<HTMLElement>('.settings-summary:not([hidden])') : null;
+      const summaryRect = summary?.getBoundingClientRect();
+      if (summaryRect && summaryRect.right + 8 > r.right - inset - w) minTop = Math.max(minTop, summaryRect.bottom + 8);
+      const maxBottom = dock.getBoundingClientRect().top - 8;
       // The fixed window can escape a short landscape viewer, but never the dock.
       const availablePhotoH = Math.max(1, maxBottom - minTop - 56);
       const photoH = Math.min((w - 12) / aspect, size === 'large' ? 360 : 180, availablePhotoH);
@@ -45,11 +50,13 @@ export function CapturePreview({ mode, frames, options, nextIndex, countdown, gr
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(viewer); observer.observe(dock);
+    const summary = avoidSettingsSummary ? document.querySelector<HTMLElement>('.settings-summary') : null;
+    if (summary) observer.observe(summary);
     window.addEventListener('resize', measure);
     window.visualViewport?.addEventListener('resize', measure);
     window.visualViewport?.addEventListener('scroll', measure);
     return () => { observer.disconnect(); window.removeEventListener('resize', measure); window.visualViewport?.removeEventListener('resize', measure); window.visualViewport?.removeEventListener('scroll', measure); };
-  }, [aspect, size, folded, viewSize, bottomInset]);
+  }, [aspect, size, folded, viewSize, bottomInset, avoidSettingsSummary]);
   const changeSize = (next: PreviewSize) => { focusAfterResize.current = true; onSize(next); };
   useLayoutEffect(() => {
     if (!focusAfterResize.current) return;

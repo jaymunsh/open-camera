@@ -48,7 +48,7 @@ export const AUTO_BEAUTY: BeautyParams = {
   spotRange: 1,
 };
 
-const DEFS: {
+export const DEFS: {
   key: keyof BeautyParams;
   label: string;
   min: number;

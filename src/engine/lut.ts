@@ -159,6 +159,18 @@ export const PRESETS: Preset[] = [
   { id: 'elegance', label: 'ELEGANCE', group: '필름', file: '/luts/lookup_soft_elegance_1.png', hald: 'tiled' },
   { id: 'elegance2', label: 'ELEGANCE 2', group: '필름', file: '/luts/lookup_soft_elegance_2.png', hald: 'tiled' },
   { id: 'classic', label: 'CLASSIC', group: '필름', file: '/luts/lookup.png', hald: 'tiled' },
+  // User-provided cubes; original data unchanged. Provenance/license unverified:
+  // /luts/provided/CREDITS.md. Not part of the CC BY-SA Film Collection.
+  { id: 'provided-muted-chrome', label: 'MUTED CHROME', group: '추가 필름', file: '/luts/provided/muted-chrome.cube' },
+  { id: 'provided-deep-negative', label: 'DEEP NEGATIVE', group: '추가 필름', file: '/luts/provided/deep-negative.cube' },
+  // Pat David HaldCLUT film emulations, CC BY-SA 4.0; see film/CREDITS.md.
+  // Genuine new color data, without baked grain, lens, or exposure adjustments.
+  { id: 'film-fuji160c', label: 'FUJI 160C', group: '필름 컬렉션', file: '/luts/film/fuji160c.png' },
+  { id: 'film-superia400', label: 'SUPERIA 400', group: '필름 컬렉션', file: '/luts/film/superia400.png' },
+  { id: 'film-ultra100', label: 'ULTRA COLOR 100', group: '필름 컬렉션', file: '/luts/film/ultra100.png' },
+  { id: 'film-elite200', label: 'ELITE CHROME 200', group: '필름 컬렉션', file: '/luts/film/elite200.png' },
+  { id: 'film-instant690', label: 'INSTANT 690', group: '필름 컬렉션', file: '/luts/film/instant690.png' },
+  { id: 'film-neopan1600', label: 'NEOPAN 1600', group: '필름 컬렉션', file: '/luts/film/neopan1600.png' },
   { id: 'portra160', label: 'PORTRA 160', group: '코닥', file: '/luts/film/portra160.png' },
   { id: 'portra400', label: 'PORTRA 400', group: '코닥', file: '/luts/film/portra400.png' },
   { id: 'portra800', label: 'PORTRA 800', group: '코닥', file: '/luts/film/portra800.png' },

@@ -74,3 +74,35 @@ Verify small portrait and short landscape layouts, keyboard tab/focus behavior,
 template geometry and pixels, shot retention, paused automatic capture, legacy
 output compatibility, full regression suite and build. Use the existing temporary
 HTTPS preview only; no production push or deployment for this task.
+
+2026-10-05 approved effects-cancellation / LUT extension: keep the same dialog,
+tabs, scrollable body and black/purple tokens. Effects gets a fixed two-button
+footer (effect off / cancel changes) and one original-film row in the incumbent
+flat film list. Close preserves choices; cancel restores only the effects present
+at entry, including random-pattern seeds and frame-indexed reprocessing state.
+Template, ratio, beauty, manual adjustments, date and original-retention choices
+remain untouched. The filter sheet adds six distinct sourced HaldCLUT color
+profiles under Film Collection, with visible attribution access. Numerical lookup
+PNGs are not decorative photography; retain their unchanged pixel data and embed
+their source/license rather than generating replacement images. Existing 20 LUT
+PNGs predate this extension and are not modified for metadata-only cleanup.
+Verify effect actions remain visible while the body scrolls at 320×568, 390×844,
+844×390 and 1280×800. Shut down old project preview/diagnostic servers and tunnels;
+after verification, leave only the current requested HTTPS preview running.
+
+2026-10-05 approved Studio refinement / settings inspection: keep the incumbent
+black/violet Operate system and all existing settings behavior. Replace Studio's
+selected-tab underline with a shared rounded segment track and selected fill.
+Reduce preview/paragraph bulk; a visible current-effect summary precedes film
+choices, with application/cancel guidance in optional help. Preserve the fixed
+effect actions, all mode/ratio/auto-manual controls and existing disclosures.
+Settings inspection is opt-in: menu toggle off by default, a translucent compact
+window over the camera, and a protected read-only sheet. All values come from live
+app state, not duplicated preferences. Group camera/frame/film/texture/manual
+adjustment/beauty/date-storage values; defaults are revealable and inactive stored
+settings are identified. Navigate to existing editors by closing inspection first.
+On tight viewports the summary folds, and composition placement reserves its
+occupied area only while enabled. No camera crop, capture pixels, LUT values,
+recipe scope or export behavior changes. Verify four viewport sets, storage denial,
+focus return, no overlay collision and the full suite. No new visual world, seed,
+comp or raster assets apply to this approved local extension.

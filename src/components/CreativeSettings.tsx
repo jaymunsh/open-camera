@@ -6,7 +6,7 @@ import { FrameDecoration } from './FrameDecoration';
 import { BoothControls } from './BoothControls';
 import { compositionLayout } from '../capture/composite';
 import { compositionPaper } from '../capture/paper';
-import { STUDIO_FILMS } from '../engine/lut';
+import { PRESETS, STUDIO_FILMS } from '../engine/lut';
 import { PAPERS } from '../capture/paper';
 import { StudioDisclosure } from './StudioDisclosure';
 
@@ -14,7 +14,7 @@ export type CreativeOptions = Pick<CameraSettings, 'strengthMode' | 'gentle' | '
 export const DEFAULT_CREATIVE: CreativeOptions = { strengthMode: 'color', gentle: false, lens: 'none', lensAmount: .5 };
 export type StudioTab = 'templates' | 'shooting' | 'effects';
 const TABS = [['templates', '템플릿'], ['shooting', '촬영 모드'], ['effects', '효과']] as const;
-export function CreativeSettings({ initialTab, mode, composition, boothMethod, boothInterval, methodLocked, working, onTemplate, onInstantFormat, selectedFilm, onFilm, onComposition, onBoothMethod, onBoothInterval, framePreview, variationControls, variationSummary, options, originals, locked, gentleAvailable, ratioIdx, ratioLocked, onRatio, lensPreview, onMode, onOptions, onOriginals, onClose }: {
+export function CreativeSettings({ initialTab, mode, composition, boothMethod, boothInterval, methodLocked, working, onTemplate, onInstantFormat, selectedFilm, onFilm, onComposition, onBoothMethod, onBoothInterval, framePreview, variationControls, variationSummary, options, originals, locked, gentleAvailable, ratioIdx, ratioLocked, onRatio, lensPreview, onMode, onOptions, onOriginals, onCancelEffects, onClearEffects, onClose }: {
   initialTab: StudioTab; mode: CaptureMode; composition: CompositionOptions; boothMethod: BoothMethod;
   methodLocked: boolean; working: boolean; onTemplate: (options: CompositionOptions) => void; onBoothMethod: (method: BoothMethod) => void;
   boothInterval: BoothInterval; onBoothInterval: (interval: BoothInterval) => void;
@@ -25,14 +25,16 @@ export function CreativeSettings({ initialTab, mode, composition, boothMethod, b
   options: CreativeOptions; originals: boolean; locked: boolean; gentleAvailable: boolean; ratioIdx: number;
   ratioLocked: boolean; onRatio: (index: number) => void; lensPreview: ReactNode; onMode: (mode: CaptureMode) => void;
   onOptions: (o: CreativeOptions) => void; onOriginals: (value: boolean) => void; onClose: () => void;
+  onCancelEffects: () => void; onClearEffects: () => void;
 }) {
   const [tab, setTab] = useState(initialTab);
   const id = useId();
+  const filmLabel = selectedFilm === 'none' ? '원본' : PRESETS.find(film => film.id === selectedFilm)?.label ?? '사용자 필름';
   const ratio = ratioIdx === 0 ? { w: 1, h: 1 } : ratioIdx === 1 ? { w: 4, h: 5 } : { w: 3, h: 4 };
   const ratioControls = <fieldset className="camera-field" disabled={ratioLocked}><legend>한 컷의 비율</legend><div className="camera-choices">{([[0, '1:1'], [2, '3:4'], [1, '4:5']] as const).map(([id, label]) => <button key={id} aria-pressed={ratioIdx === id} onClick={() => onRatio(id)}>{label}</button>)}</div></fieldset>;
   const boothControls = <BoothControls method={boothMethod} interval={boothInterval} locked={methodLocked} onMethod={onBoothMethod} onInterval={onBoothInterval} />;
   const decoration = <StudioDisclosure title="프레임 꾸미기" summary={`${PAPERS.find((paper) => paper.id === composition.paper)?.label ?? '화이트'} · ${composition.frame === 'memory' && composition.caption?.trim() ? '문구 있음' : '문구 없음'}`} initiallyOpen={false}><FrameDecoration options={composition} disabled={working} onChange={onComposition} /></StudioDisclosure>;
-  return <CameraDialog title="스튜디오" onClose={onClose} className="studio-dialog">
+  return <CameraDialog title="스튜디오" onClose={onClose} className="studio-dialog" footer={tab === 'effects' && <div className="studio-effect-actions" role="group" aria-label="스튜디오 효과 작업"><button disabled={locked || working} onClick={onClearEffects}>효과 해제</button><button disabled={locked || working} onClick={onCancelEffects}>변경 취소</button></div>}>
     <div className="studio-tabs" role="tablist" aria-label="스튜디오 메뉴">
       {TABS.map(([key, label], index) => <button key={key} role="tab" id={`${id}-${key}`} aria-selected={tab === key} aria-controls={`${id}-panel`} tabIndex={tab === key ? 0 : -1} onClick={() => setTab(key)} onKeyDown={(event) => {
         const next = event.key === 'ArrowRight' ? (index + 1) % TABS.length : event.key === 'ArrowLeft' ? (index + TABS.length - 1) % TABS.length : event.key === 'Home' ? 0 : event.key === 'End' ? TABS.length - 1 : null;
@@ -67,7 +69,10 @@ export function CreativeSettings({ initialTab, mode, composition, boothMethod, b
     </>}
     {tab === 'effects' && <>
     {framePreview}
+    <p className="studio-current-effect" aria-label="현재 효과">{filmLabel}<span>렌즈 {options.lens === 'none' ? '꺼짐' : options.lens === 'star' ? '빛줄기' : '가장자리 굴절'} · 패턴 {variationSummary?.mode === 'fixed' ? '고정' : variationSummary?.mode === 'new' ? '매 컷' : '꺼짐'}</span></p>
+    <details className="studio-help"><summary>적용·취소 안내</summary><p className="camera-note">선택은 바로 적용돼요. 닫기는 유지, 변경 취소는 열기 전 효과로 돌아가요. 효과 해제는 필름·렌즈·추가 질감만 끄며 템플릿·보정·날짜는 유지해요.</p></details>
     <fieldset className="camera-field" disabled={locked || working}><legend>스튜디오 필름</legend><div className="studio-films">
+      <button aria-label="원본 · 필름 없음" aria-pressed={selectedFilm === 'none'} onClick={() => onFilm('none')}><span>원본 · 필름 없음</span><small>필름 색감만 해제 · 렌즈와 추가 질감은 유지</small></button>
       {STUDIO_FILMS.map((film) => <button key={film.id} aria-label={film.label} aria-pressed={selectedFilm === film.id} onClick={() => onFilm(film.id)}><span>{film.label}</span><small>{film.description}</small></button>)}
     </div><p className="camera-note">프레임과 별개로 선택하는 새 필터예요. 기존 필터는 하단 필터 목록에서 그대로 사용할 수 있어요.</p></fieldset>
     <fieldset className="camera-field" disabled={locked}><legend>필터 강도 적용</legend><div className="camera-choices">{([['color', '색상만'], ['whole', '전체 룩']] as const).map(([id, label]) => <button key={id} aria-pressed={options.strengthMode === id} onClick={() => onOptions({ ...options, strengthMode: id })}>{label}</button>)}</div></fieldset>

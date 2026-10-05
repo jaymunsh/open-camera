@@ -55,7 +55,7 @@ export function FilterSheet({ selected, onSelect, getSource, onClose, customs, s
     const key = (event: KeyboardEvent) => {
       if (event.key === 'Escape') close.current();
       if (event.key !== 'Tab') return;
-      const controls = [...(sheetRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled)') ?? [])].filter((el) => el.getClientRects().length);
+      const controls = [...(sheetRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), a[href]') ?? [])].filter((el) => el.getClientRects().length);
       const first = controls[0], last = controls.at(-1); const outside = !controls.includes(document.activeElement as HTMLElement);
       if (!first) { event.preventDefault(); sheetRef.current?.focus(); }
       else if (event.shiftKey && (document.activeElement === first || outside)) { event.preventDefault(); last?.focus(); }
@@ -170,6 +170,7 @@ export function FilterSheet({ selected, onSelect, getSource, onClose, customs, s
               }}
             >
               <div className="sheet-group">{s.title}</div>
+              {s.title === '필름 컬렉션' && <p className="sheet-group-note">실제 필름 색감을 근사하는 공개 LUT 6종이에요. 입자·렌즈 효과는 별도로 선택해요. 제조사 공식 LUT는 아닙니다. <a href="/luts/film/CREDITS.md" target="_blank" rel="noopener noreferrer">LUT 출처·라이선스</a></p>}
               {s.title === '빈티지 질감' && <p className="sheet-group-note">구형 디지캠은 저해상도·색 노이즈, 일회용 필름은 입자·빛 번짐, 인화사진은 바랜 색감이에요. 저장할 때 축소·압축 질감을 더합니다. 강도는 스튜디오의 ‘전체 룩’으로 조절해요.</p>}
               <div className="sheet-grid">
                 {s.items.map((p) => (
