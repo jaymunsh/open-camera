@@ -7,7 +7,10 @@ import { FilterSheet } from './components/FilterSheet';
 import { FilterStrip } from './components/FilterStrip';
 import { InstallHint } from './components/InstallHint';
 import { CustomLutsModal } from './components/CustomLutsModal';
-import { addCustomLut, listCustomLuts, loadCustomLut, loadPresetLut, PRESETS, removeCustomLut, renameCustomLut, type CustomEntry } from './engine/lut';
+import { addCustomLut, listCustomLuts, loadCustomLut, loadPresetLut, loadSignatureCandidate, PRESETS, removeCustomLut, renameCustomLut, type CustomEntry } from './engine/lut';
+import { DEFAULT_FILM_QUALITY, FilmQualityError, assertFilmQualityForPreset, resolveFilmQuality } from './engine/filmQuality';
+import { createSignatureQuality, signatureFilm } from './engine/signatureFilms';
+import { useFilmQuality } from './capture/useFilmQuality';
 import {
   DATE_FORMATS,
   DATE_SIZES,
@@ -116,7 +119,8 @@ export default function App() {
   const [panel, setPanel] = useState<Panel>('filters');
   const [params, setParams] = useState<FilterParams>(DEFAULT_PARAMS);
   const [beauty, setBeauty] = useState<BeautyParams>(DEFAULT_BEAUTY);
-  const [lutId, setLutId] = useState('none');
+  const filmQuality = useFilmQuality();
+  const [lutId, setLutId] = useState(() => filmQuality.settings?.origin === 'profile' ? filmQuality.settings.profile!.id : 'none');
   const [lutIntensity, setLutIntensity] = useState(1);
   const [customs, setCustoms] = useState<CustomEntry[]>(() => listCustomLuts());
   const [editSrc, setEditSrc] = useState<EditSource | null>(null);
@@ -175,8 +179,9 @@ export default function App() {
   const captureRatioIdx = creative.mode !== 'normal' && creative.frames.length ? creative.frames[0].settings.ratioIdx : creative.mode === 'instant' ? creative.options.instantFormat === 'portrait' ? 2 : 0 : tiledMode ? compositeRatioIdx : ratioIdx;
   const ratio = RATIOS[captureRatioIdx];
   const cameraActive = mode === 'camera' && !creative.review && !creative.historyOpen;
-  const generalSettings: CameraSettings = { lutId, intensity: lutIntensity, params: { ...params }, beauty: { ...beauty }, ratioIdx, grainOff, variation: { ...variation.settings }, ...creativeOptions, date: { mode: dateMode, fmt: dateFmt, size: dateSize, orient: dateOrient, style: dateStyle } };
-  const gentleAvailable = PRESETS.find((p) => p.id === lutId)?.group !== '디지캠' && !!PRESETS.find((p) => p.id === lutId)?.fx;
+  const generalSettings: CameraSettings = { lutId, intensity: lutIntensity, params: { ...params }, beauty: { ...beauty }, ratioIdx, grainOff, variation: { ...variation.settings }, ...(filmQuality.settings ? { filmQuality: filmQuality.settings } : {}), ...creativeOptions, date: { mode: dateMode, fmt: dateFmt, size: dateSize, orient: dateOrient, style: dateStyle } };
+  const qualityKey = JSON.stringify(filmQuality.settings ?? null);
+  const gentleAvailable = filmQuality.settings?.model !== 'film-v2' && PRESETS.find((p) => p.id === lutId)?.group !== '디지캠' && !!PRESETS.find((p) => p.id === lutId)?.fx;
   const look: RenderLook = { lens: creativeOptions.lens, lensAmount: creativeOptions.lensAmount, gentle: creativeOptions.gentle && gentleAvailable };
   const lookRef = useRef(look); lookRef.current = look;
   const recipeApplying = useRef(false);
@@ -440,7 +445,7 @@ export default function App() {
     if (lutId === 'none' || loadedLuts[lutId]) return;
     let ok = true;
     const isCustom = customs.some((c) => c.id === lutId);
-    const load = isCustom ? loadCustomLut(lutId) : loadPresetLut(lutId);
+    const load = isCustom ? loadCustomLut(lutId) : signatureFilm(lutId) ? loadSignatureCandidate(lutId) : loadPresetLut(lutId);
     load
       .then((l) => ok && setLoadedLuts((m) => ({ ...m, [lutId]: l })))
       .catch((e) => {
@@ -462,11 +467,13 @@ export default function App() {
     lut: LutData | null;
     amount: number;
     fx: FxSpec | null;
+    qualityKey: string;
   }>({
     key: 'preset-none',
     lut: null,
     amount: 0,
     fx: null,
+    qualityKey,
   });
 
   const fxSeedRef = useRef(0.5);
@@ -495,13 +502,16 @@ export default function App() {
       fx: deriveFx(preset?.fx
         ? { ...preset.fx, grain: grainOff ? 0 : preset.fx.grain, seed: fxSeedRef.current }
         : null, lutIntensity, creativeOptions.strengthMode, look.gentle),
+      qualityKey,
     });
-  }, [lutId, lutReady, loadedLuts, lutIntensity, grainOff, creativeOptions.strengthMode, look.gentle, studioEffectsRevision]);
+  }, [lutId, lutReady, loadedLuts, lutIntensity, grainOff, creativeOptions.strengthMode, look.gentle, studioEffectsRevision, qualityKey]);
 
   const showDate = dateMode === 'on' || (dateMode === 'auto' && !!applied.fx?.date);
-  const renderReady = lutReady && applied.key === `preset-${lutId}` && applied.lut === (lutId === 'none' ? null : loadedLuts[lutId]) && applied.amount === (lutId === 'none' ? 0 : lutIntensity);
+  const renderReady = lutReady && applied.qualityKey === qualityKey && applied.key === `preset-${lutId}` && applied.lut === (lutId === 'none' ? null : loadedLuts[lutId]) && applied.amount === (lutId === 'none' ? 0 : lutIntensity);
+  const renderReadyRef = useRef(renderReady); renderReadyRef.current = renderReady;
   const previewPattern = mode === 'edit' && editPatterns ? editPatterns.at(-1) ?? null : variation.pattern;
   const resolvedPreview = useMemo(() => resolveVariation(params, applied.fx, previewPattern ? variation.settings : DEFAULT_VARIATION, previewPattern, grainOff), [params, applied.fx, variation.settings, previewPattern, grainOff]);
+  look.filmQuality = useMemo(() => resolveFilmQuality(filmQuality.settings, { params: resolvedPreview.params, fx: resolvedPreview.fx, intensity: lutIntensity, strengthMode: creativeOptions.strengthMode, grainOff, pattern: previewPattern }), [filmQuality.settings, resolvedPreview, lutIntensity, creativeOptions.strengthMode, grainOff, previewPattern]);
 
   const paramsRef = useRef(resolvedPreview.params);
   paramsRef.current = resolvedPreview.params;
@@ -606,7 +616,7 @@ export default function App() {
     const tick = (t: number) => {
       const v = videoRef.current;
       const p = getPipe();
-      if (p && v && v.readyState >= 2) {
+      if (p && v && v.readyState >= 2 && renderReadyRef.current) {
         try {
         applyBeauty(p, compareRef.current);
         p.setSource(v);
@@ -659,7 +669,7 @@ export default function App() {
       look: compare ? undefined : look,
       eyes: !compare && (applied.fx?.redeye ?? 0) > 0.001 ? eyePoints(getSmoothedFaces()) : undefined,
     }); } catch (e) { setGlError(e instanceof Error ? e.message : '미리보기를 만들지 못했어요. 스튜디오에서 빈티지 우연성을 꺼주세요.'); }
-  }, [mode, editSrc, params, applied, compare, getPipe, sizeTick, beauty, beautyTick, creativeOptions, look.gentle, reprocessRecord, renderReady, variation.settings, variation.pattern, editPatterns]);
+  }, [mode, editSrc, params, applied, compare, getPipe, sizeTick, beauty, beautyTick, creativeOptions, look.gentle, look.filmQuality, reprocessRecord, renderReady, variation.settings, variation.pattern, editPatterns]);
 
   const getSource = useCallback((): TexImageSource | null => {
     if (mode === 'camera') {
@@ -716,8 +726,16 @@ export default function App() {
   const applyComparison = (choice: ComparisonChoice) => {
     if (busy || creative.working || creative.locked || pendingLut || preview.busy || preview.error || comparisonLoading || comparisonError) return;
     if (choice.id !== lutId) comparisonApplying.current = true;
+    if (signatureFilm(choice.id) && !filmQuality.settings) filmQuality.update({ ...DEFAULT_FILM_QUALITY });
     setLutId(choice.id); setLutIntensity(choice.amount); closeComparison();
   };
+  const selectFilm = useCallback((id: string) => {
+    if (busy || creative.working || creative.locked) return;
+    if (signatureFilm(id)) {
+      if (filmQuality.settings?.origin !== 'manual') filmQuality.update(createSignatureQuality(id, filmQuality.settings?.seed ?? .5));
+    } else if (filmQuality.settings?.origin === 'profile') filmQuality.update(undefined);
+    setLutId(id);
+  }, [busy, creative.working, creative.locked, filmQuality.settings, filmQuality.update]);
 
   const confirmEditEntry = useCallback(() => !creative.frames.length || window.confirm('진행 중인 촬영을 버리고 사진 편집을 시작할까요?'), [creative.frames.length]);
   const openImage = useCallback(async (f: File) => {
@@ -740,13 +758,14 @@ export default function App() {
   };
   const applyCameraSettings = async (value: CameraSettings, restoredPatterns?: (FilmPattern | null)[]) => {
     const s = validateSettings(value);
-    if (s.lutId !== 'none' && !PRESETS.some((p) => p.id === s.lutId) && !customs.some((c) => c.id === s.lutId)) throw new Error('이 레시피의 사용자 LUT가 없습니다. LUT를 다시 가져와주세요.');
+    if (s.lutId !== 'none' && !PRESETS.some((p) => p.id === s.lutId) && !signatureFilm(s.lutId) && !customs.some((c) => c.id === s.lutId)) throw new Error('이 레시피의 사용자 LUT가 없습니다. LUT를 다시 가져와주세요.');
     if (s.lutId !== 'none' && !loadedLuts[s.lutId]) {
-      const loaded = await (customs.some((c) => c.id === s.lutId) ? loadCustomLut(s.lutId) : loadPresetLut(s.lutId));
+      const loaded = await (customs.some((c) => c.id === s.lutId) ? loadCustomLut(s.lutId) : signatureFilm(s.lutId) ? loadSignatureCandidate(s.lutId) : loadPresetLut(s.lutId));
       setLoadedLuts((rows) => ({ ...rows, [s.lutId]: loaded }));
     }
     recipeApplying.current = s.lutId !== lutId;
     setLutId(s.lutId); setLutIntensity(s.intensity); setParams(s.params); setBeauty(s.beauty); setGrainOff(s.grainOff); setRatioIdx(s.ratioIdx);
+    filmQuality.update(s.filmQuality);
     setCreativeOptions({ strengthMode: s.strengthMode, gentle: s.gentle, lens: s.lens, lensAmount: s.lensAmount });
     setDateMode(s.date.mode); setDateFmt(s.date.fmt); setDateSize(s.date.size); setDateOrient(s.date.orient); setDateStyle(s.date.style);
     if (restoredPatterns) variation.apply(validateVariation(s.variation), [...restoredPatterns].reverse().find(p => p !== null) ?? null);
@@ -784,6 +803,7 @@ export default function App() {
   const reprocessPhoto = async (record: CaptureRecord) => {
     if (!confirmEditEntry()) return;
     if (!record.originals.length) throw new Error('이 사진에는 보관한 원본이 없습니다');
+    if (record.settings) assertFilmQualityForPreset(record.settings.lutId, record.settings.filmQuality);
     const restoredPatterns = validateFramePatterns(record);
     const frameSettings = record.originals.map((_, index) => validateSettings({ ...(record.frameSettings?.[index] ?? record.settings ?? generalSettings), variation: validateVariation(record.frameSettings?.[index]?.variation ?? record.settings?.variation) }));
     const reverseActiveIndex = restoredPatterns ? [...restoredPatterns].reverse().findIndex(p => p !== null) : -1;
@@ -798,7 +818,7 @@ export default function App() {
     const source = record.mode === 'normal' ? sources[0] : composeFrames(sources, record.mode, record.composition ?? {});
     if (record.settings) {
       try { await applyCameraSettings({ ...record.settings, variation: restoredVariation, beauty: { ...DEFAULT_BEAUTY } }, restoredPatterns); }
-      catch { setLutId('none'); setParams(DEFAULT_PARAMS); setBeauty(DEFAULT_BEAUTY); setCreativeOptions(DEFAULT_CREATIVE); variation.apply(DEFAULT_VARIATION); showToast('촬영 필터가 없어 원본에서 시작합니다'); }
+      catch (error) { if (error instanceof FilmQualityError) { for (const canvas of sources) canvas.width = canvas.height = 0; throw error; } setLutId('none'); filmQuality.update(undefined); setParams(DEFAULT_PARAMS); setBeauty(DEFAULT_BEAUTY); setCreativeOptions(DEFAULT_CREATIVE); variation.apply(DEFAULT_VARIATION); showToast('촬영 필터가 없어 원본에서 시작합니다'); }
     }
     if (!record.settings) variation.apply(restoredVariation, restoredPatterns ? [...restoredPatterns].reverse().find(p => p !== null) ?? null : null);
     setEditPatterns(restoredPatterns);
@@ -808,22 +828,24 @@ export default function App() {
 
   captureFrameRef.current = async () => {
     const v = videoRef.current;
-    if (!v || v.readyState < 2 || !lutReady) throw new Error('카메라와 필터가 준비된 후 촬영해주세요');
+    if (!v || v.readyState < 2 || !renderReady) throw new Error('카메라와 필터가 준비된 후 촬영해주세요');
     setFlash((f) => f + 1);
     const s = structuredClone(creative.mode === 'booth' && creative.frames.length ? creative.frames[0].settings : generalSettings);
     s.ratioIdx = captureRatioIdx;
-    const activeGentle = s.gentle && PRESETS.find((p) => p.id === s.lutId)?.group !== '디지캠';
+    const activeGentle = s.gentle && s.filmQuality?.model !== 'film-v2' && PRESETS.find((p) => p.id === s.lutId)?.group !== '디지캠';
     const baseFx = deriveFx(PRESETS.find((p) => p.id === s.lutId)?.fx ? { ...PRESETS.find((p) => p.id === s.lutId)!.fx, grain: s.grainOff ? 0 : PRESETS.find((p) => p.id === s.lutId)!.fx?.grain, seed: fxSeedRef.current } : null, s.intensity, s.strengthMode, activeGentle);
     const preferences = validateVariation(s.variation);
     const pattern = preferences.mode === 'off' ? null : preferences.mode === 'fixed' ? { version: 1 as const, seed: preferences.fixedSeed } : variation.pattern ?? nextPattern();
     const resolved = resolveVariation(s.params, baseFx, preferences, pattern, s.grainOff);
+    const quality = resolveFilmQuality(s.filmQuality, { params: resolved.params, fx: resolved.fx, intensity: s.intensity, strengthMode: s.strengthMode, grainOff: s.grainOff, pattern });
+    if (quality && s.filmQuality) s.filmQuality = { ...s.filmQuality, seed: quality.seed };
     const fx = resolved.fx;
     const frozen = snapshotFrame(v, null, false, 2048);
     const createdAt = Date.now();
     const original = keepOriginal ? snapshotFrame(frozen, ratio, facing === 'user', 2048) : null;
     const rendered = await renderFilteredCanvas(frozen, resolved.params, `preset-${s.lutId}`, s.lutId === 'none' ? null : loadedLuts[s.lutId], s.lutId === 'none' ? 0 : s.intensity, facing === 'user', ratio, fx, beautyMask.current, s.beauty,
       warpGpuFail.current && lastSrcSize.current ? drawWarpField(getSmoothedFaces(), lastSrcSize.current.w, lastSrcSize.current.h, { eye: s.beauty.eye, slim: s.beauty.slim, nose: s.beauty.nose, head: s.beauty.head }) : warpPairs.current,
-      (fx?.redeye ?? 0) > .001 ? eyePoints(getSmoothedFaces()) : [], { on: false, fmt: s.date.fmt, size: s.date.size, orient: s.date.orient }, { lens: s.lens, lensAmount: s.lensAmount, gentle: activeGentle });
+      (fx?.redeye ?? 0) > .001 ? eyePoints(getSmoothedFaces()) : [], { on: false, fmt: s.date.fmt, size: s.date.size, orient: s.date.orient }, { lens: s.lens, lensAmount: s.lensAmount, gentle: activeGentle, filmQuality: quality });
     variation.commitShot(pattern);
     return { canvas: rendered, original, settings: s, createdAt, fx, pattern };
   };
@@ -832,7 +854,7 @@ export default function App() {
 
   const capture = useCallback(async () => {
     const v = videoRef.current;
-    if (!v || v.readyState < 2 || busy || actionLock.current) return;
+    if (!v || v.readyState < 2 || busy || actionLock.current || !renderReady) return;
     actionLock.current = true;
     setBusy(true);
     setFlash((f) => f + 1);
@@ -841,6 +863,8 @@ export default function App() {
       const settings = structuredClone(generalSettings);
       const pattern = variation.pattern;
       const resolved = resolveVariation(settings.params, applied.fx, variation.settings, pattern, grainOff);
+      const quality = resolveFilmQuality(settings.filmQuality, { params: resolved.params, fx: resolved.fx, intensity: settings.intensity, strengthMode: settings.strengthMode, grainOff, pattern });
+      if (quality && settings.filmQuality) settings.filmQuality = { ...settings.filmQuality, seed: quality.seed };
       const frozen = keepOriginal || pattern ? snapshotFrame(v, null, false) : v;
       const original = keepOriginal ? snapshotFrame(frozen, ratio, facing === 'user') : null;
       const size = srcSize(frozen);
@@ -866,7 +890,7 @@ export default function App() {
           : warpPairs.current,
         (applied.fx?.redeye ?? 0) > 0.001 ? eyePoints(getSmoothedFaces()) : [],
         { on: showDate, fmt: dateFmt, size: dateSize, orient: dateOrient, style: dateStyle },
-        look,
+        { ...look, filmQuality: quality },
       );
       variation.commitShot(pattern);
       const name = timestampName();
@@ -879,7 +903,7 @@ export default function App() {
       actionLock.current = false;
       setBusy(false);
     }
-  }, [busy, facing, params, applied, videoRef, ratio, showToast, beauty, showDate, dateFmt, dateSize, dateOrient, dateStyle, creativeOptions, keepOriginal, creative.remember, grainOff, ratioIdx, variation.settings, variation.pattern]);
+  }, [busy, facing, params, applied, videoRef, ratio, showToast, beauty, showDate, dateFmt, dateSize, dateOrient, dateStyle, creativeOptions, keepOriginal, creative.remember, grainOff, ratioIdx, variation.settings, variation.pattern, filmQuality.settings, renderReady]);
 
   const shutterAction = useRef<() => void>(() => {});
   shutterAction.current = () => { if (creative.mode === 'normal') void capture(); else void creative.shoot(); };
@@ -914,6 +938,7 @@ export default function App() {
     setBusy(true);
     try {
       const savedSettings = structuredClone(generalSettings);
+      if (savedSettings.filmQuality && look.filmQuality) savedSettings.filmQuality.seed = look.filmQuality.seed;
       const savedPatterns = editPatterns?.map(p => p ? { ...p } : null);
       const compositeResult = reprocessRecord && reprocessRecord.mode !== 'normal' ? await exportReprocessed(reprocessRecord, { ...savedSettings, gentle: look.gentle }, applied.lut, applied.fx, savedPatterns ? { patterns: savedPatterns } : undefined) : null;
       const blob = compositeResult?.blob ?? await exportFiltered(
@@ -940,7 +965,8 @@ export default function App() {
         look,
       );
       const name = timestampName();
-      if (reprocessRecord) { const size = srcSize(compositeResult?.canvas ?? editSrc); void creative.remember({ id: crypto.randomUUID(), createdAt: Date.now(), shotAt: reprocessRecord.shotAt ?? reprocessRecord.createdAt, blob, name, width: size.w, height: size.h, mode: reprocessRecord.mode, originals: keepOriginal ? [...reprocessRecord.originals] : [], settings: savedSettings, frameSettings: reprocessRecord.frameSettings?.map(frame => ({ ...structuredClone(savedSettings), variation: validateVariation(frame.variation) })), ...(savedPatterns ? { framePatterns: savedPatterns } : {}), composition: reprocessRecord.composition }); }
+      if (reprocessRecord) { const size = srcSize(compositeResult?.canvas ?? editSrc); void creative.remember({ id: crypto.randomUUID(), createdAt: Date.now(), shotAt: reprocessRecord.shotAt ?? reprocessRecord.createdAt, blob, name, width: size.w, height: size.h, mode: reprocessRecord.mode, originals: keepOriginal ? [...reprocessRecord.originals] : [], settings: savedSettings, frameSettings: reprocessRecord.frameSettings?.map((frame, index) => ({ ...structuredClone(savedSettings), ...(savedSettings.filmQuality ? { filmQuality: { ...savedSettings.filmQuality, seed: savedPatterns?.[index]?.seed ?? frame.filmQuality?.seed ?? savedSettings.filmQuality.seed } } : {}), variation: validateVariation(frame.variation) })), ...(savedPatterns ? { framePatterns: savedPatterns } : {}), composition: reprocessRecord.composition }); }
+      else { const size = srcSize(editSrc); const original = keepOriginal ? snapshotFrame(editSrc, null, false) : null; void creative.remember({ id: crypto.randomUUID(), createdAt: Date.now(), blob, name, width: size.w, height: size.h, mode: 'normal', originals: [], settings: savedSettings, ...(previewPattern ? { framePatterns: [{ ...previewPattern }] } : {}) }, original ? Promise.all([canvasBlob(original)]) : undefined); }
       const r = await saveImage(blob, name);
       if (r === 'shared' || r === 'downloaded') showToast('저장됨');
     } catch (e) {
@@ -948,7 +974,7 @@ export default function App() {
     } finally {
       setBusy(false);
     }
-  }, [busy, editSrc, params, applied, showToast, beauty, showDate, dateFmt, dateSize, dateOrient, dateStyle, creativeOptions, reprocessRecord, creative.remember, keepOriginal, renderReady, variation.settings, variation.pattern, editPatterns, grainOff]);
+  }, [busy, editSrc, params, applied, showToast, beauty, showDate, dateFmt, dateSize, dateOrient, dateStyle, creativeOptions, reprocessRecord, creative.remember, keepOriginal, renderReady, variation.settings, variation.pattern, editPatterns, grainOff, filmQuality.settings, look.filmQuality, previewPattern]);
 
   const importLut = useCallback(
     async (files: File[]) => {
@@ -1037,7 +1063,7 @@ export default function App() {
         vignette: p.vignette, grain: p.grain,
       }));
       setLutIntensity(1);
-      setApplied({ key: `preset-${entry.id}`, lut, amount: 1, fx: null });
+      setApplied({ key: `preset-${entry.id}`, lut, amount: 1, fx: null, qualityKey });
       setLutId(entry.id);
       setPanel('filters');
       showToast('커스텀 LUT로 저장됨');
@@ -1046,7 +1072,7 @@ export default function App() {
     } finally {
       setBusy(false);
     }
-  }, [busy, lutId, loadedLuts, params, lutIntensity, customs.length, showToast]);
+  }, [busy, lutId, loadedLuts, params, lutIntensity, customs.length, showToast, qualityKey]);
 
   useEffect(() => {
     localStorage.setItem('oc-grid', gridOn ? '1' : '0');
@@ -1156,6 +1182,7 @@ export default function App() {
     // Even a reselected entry LUT needs a new applied-FX object with its old seed.
     setStudioEffectsRevision(value => value + 1);
     setLutId(s.lutId); setLutIntensity(s.intensity); setGrainOff(s.grainOff);
+    filmQuality.update(s.filmQuality);
     setCreativeOptions({ strengthMode: s.strengthMode, gentle: s.gentle, lens: s.lens, lensAmount: s.lensAmount });
     variation.apply(validateVariation(s.variation), entry.pattern);
     if (entry.recordId && reprocessRecord?.id === entry.recordId) {
@@ -1167,6 +1194,7 @@ export default function App() {
   const clearStudioEffects = () => {
     if (busy || creative.working || creative.locked) return;
     setLutId('none'); setLutIntensity(1); setGrainOff(false); setCreativeOptions({ ...DEFAULT_CREATIVE });
+    filmQuality.update(undefined);
     changeVariation({ ...variation.settings, mode: 'off' });
   };
   const openSettingsOverview = () => {
@@ -1485,7 +1513,7 @@ export default function App() {
       ) : panel === 'filters' ? (
         <FilterStrip
           selected={lutId}
-          onSelect={setLutId}
+          onSelect={selectFilm}
           getSource={getSource}
           onExpand={() => setSheetOpen(true)}
           deps={[thumbKey, customs, preview.sourceKey]}
@@ -1614,7 +1642,7 @@ export default function App() {
       {sheetOpen && (
         <FilterSheet
           selected={lutId}
-          onSelect={setLutId}
+          onSelect={selectFilm}
           getSource={getSource}
           onClose={() => { comparisonEpoch.current++; setComparisonLoading(false); setSheetOpen(false); }}
           active={!comparisonSource}
@@ -1707,7 +1735,7 @@ framePreview={<StudioFramePreview sampleId={preview.sampleId} source={studioPrev
         variationSummary={{ mode: variation.settings.mode, warning: variation.warning, writable: variation.writable }}
         onFilm={(id) => {
           if (id === 'none' && id !== lutId) preservePresetFx.current = true;
-          setLutId(id);
+          selectFilm(id);
         }}
         onInstantFormat={(format) => {
           if (!creative.changeMode('instant')) return;
